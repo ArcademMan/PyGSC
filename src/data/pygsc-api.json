@@ -1,0 +1,418 @@
+ {
+	"language-constructs": {
+		"def ": {
+			"translation": "function ",
+			"fullAPI": "def <function name>()",
+			"summary": "Python from of 'Function', shorter.",
+			"example": "def myfunction",
+			"mandatory1": "<function name> name of the function"
+        },
+		"autoexec": {
+			"translation": "function autoexec",
+			"fullAPI": "autoexec <function name>()",
+			"summary": "Python from of 'Function autoexec', shorter.",
+			"example": "autoexec myfunction",
+			"mandatory1": "<function name> name of the function"
+        },
+		"pass": {
+			"translation": "//this is a placeholder pass",
+			"fullAPI": "pass",
+			"summary": "Python pass to add placeholders.",
+			"example": "if something\n\tpass"
+        },
+		"#": {
+			"translation": "//",
+			"fullAPI": "#",
+			"summary": "Python comment",
+			"example": "#comment"
+        }
+    },
+	"logics-operator": {
+		"or": {
+			"translation": "||",
+			"fullAPI": "or ",
+			"summary": "Python OR operator, || in GSC.",
+			"example": "if variable or variable2"
+        },
+		"and": {
+			"translation": "&&",
+			"fullAPI": "and ",
+			"summary": "Python AND operator, && in GSC.",
+			"example": "if variable and variable2"
+        },
+		"greater": {
+			"translation": ">",
+			"fullAPI": "greater ",
+			"summary": "My custom > operator, > in GSC.",
+			"example": "if variable greater variable2"
+        },
+		"minor": {
+			"translation": "<",
+			"fullAPI": "minor",
+			"summary": "My custom < operator, < in GSC.",
+			"example": "if variable minor variable2"
+        },
+		"inequal": {
+			"translation": "!=",
+			"fullAPI": "inequal ",
+			"summary": "My custom != operator, != in GSC.",
+			"example": "if variable inequal variable2"
+        },
+		"not": {
+			"translation": "!",
+			"fullAPI": "not",
+			"summary": "Python not operator, ! in GSC.",
+			"example": "if not variable"
+        },
+		"none": {
+			"translation": "undefined",
+			"fullAPI": "none",
+			"summary": "Python None operator, undefined in GSC.",
+			"example": "variable = none"
+        },
+		"null": {
+			"translation": "undefined",
+			"fullAPI": "none",
+			"summary": "java Null operator, undefined in GSC.",
+			"example": "variable = null"
+        }
+    },
+	"gsc-shortcuts": {
+		"thr": {
+			"translation": "thread",
+			"fullAPI": "thread",
+			"summary": "shorter version of thread. i know is not that long but i hate it.",
+			"example": "thr functionname()"
+        },
+		"end ": {
+			"translation": "end ",
+			"fullAPI": "end ",
+			"summary": "shorter version of end. i know is not that long but i hate it.",
+			"example": "self end 'death'"
+        },
+		"wait_blackscreen": {
+			"translation": "level flag::wait_till( \"initial_blackscreen_passed\" )",
+			"fullAPI": "wait_blackscreen",
+			"summary": "wait till the black screen is passed.",
+			"example": "wait_blackscreen"
+        },
+		"wait_any": {
+			"translation": "util::waittill_any_return",
+			"fullAPI": "wait_any('str1', 'death', 'reload', 'whatever')",
+			"summary": "Wait any string and return it.",
+			"example": "msg = wait_any('str1', 'death', 'reload', 'whatever')"
+        }
+    },
+	"my-common-misspell": {
+		"waitill ": {
+			"translation": "waittill ",
+			"fullAPI": "<entity> waittill(<string>) ",
+			"summary": "my common mistake for 'waittill'",
+			"example": "struct waitill('something')",
+			"mandatory1": "<entity> something that is waiting for an event to happen, can be level too.",
+			"mandatory2": "<string> string needed to wait a specific string event."
+        }
+    },
+	"player-related": {
+		"givepoints": {
+			"translation": "zm_score::add_to_player_score",
+			"fullAPI": "givepoints(<points>)",
+			"summary": "Custom command to give a player points.",
+			"example": "player givepoints(500)",
+			"mandatory1": "<player> the player to give point to.",
+			"mandatory2": "<points> int of the points to give to a player."
+        },
+        "takepoints": {
+            "translation": "zm_score::minus_to_player_score",
+            "fullAPI": "takepoints(<points>)",
+            "summary": "Custom command to give a player points.",
+            "example": "player takepoints(500)",
+            "mandatory1": "<player> the player to take point to.",
+            "mandatory2": "<points> int of the points to take to a player."
+        },
+		"$players": {
+			"translation": "GetPlayers()",
+			"fullAPI": "$players",
+			"summary": "Return the array of the players.",
+			"example": "foreach player in $players"
+		},
+		"giveweapon": {
+			"translation": "zm_weapons::weapon_give",
+			"fullAPI": "giveweapon(<weapon>, [is_upgrade = false], [magic_box = false], [nosound = false], [b_switch_weapon = true])",
+			"summary": "Give the weapon to a player.",
+			"example": "player giveweapon('ray_gun')",
+			"mandatory1": "<weapon> the weapon to give.",
+			"optional1": "[is_upgrade] default false, give the upgraded weapon of the weapon",
+			"optional2": "[magic_box] default false, i don't know what that do.",
+			"optional3": "[nosound] default false, if true the '$$$$ sound' will not play.",
+			"optional4": "[b_switch_weapon] default true, switch to the given weapon."
+		},
+		"jteleporthere": {
+			"translation": "thread j_utility::teleportHere",
+			"fullAPI": "teleporthere(<vec or model or struct>)",
+			"summary": "Teleport the player to the given location",
+			"example": "player teleporthere(model)",
+			"mandatory1": "<vec or model or struct> the weapon to give."
+		},
+		"burn": {
+			"translation": "burnplayer::SetPlayerBurning",
+			"fullAPI": "burn(<duration>, <interval>, <damage per interval>)",
+			"summary": "Set the player on fire, on its view and on third person.",
+			"example": "player burn(10, 2, 4)",
+			"mandatory1": "<duration> The duration of the fire.",
+			"mandatory2": "<interval> Time in seconds on how often you take fire damage.",
+			"mandatory3": "<damage per interval> Damage inflict every interval."
+		}
+    },
+	"zombie-related": {
+		"spawnzombie": {
+			"translation": "j_utility::spawnZombie",
+			"fullAPI": "spawnZombie([actor], <positions>, [model])",
+			"summary": "Custom commands from j utils to spawn a zombie.",
+			"example": "zom = spawnZombie(none, structs)",
+			"optional1": "<actor> You can set a specific actor to spawn, otherwise stardards zombies.",
+			"mandatory1": "<positions> Spawn point or spawn points where you want the zombie to spawn.",
+			"optional2": "[model] set a specific model to the spawned zombie."
+        },
+		"setzombiespeed": {
+			"translation": "zombie_utility::set_zombie_run_cycle_override_value",
+			"fullAPI": "setzombiespeed(<run state>)",
+			"summary": "Make the zombie, walk, run, sprint or supersprinter",
+			"example": "zom setzombiespeed('run')",
+			"mandatory1": "<run state> String for the zombie state, walk, run, sprint or supersprinter"
+		}
+	},
+	"structs": {
+		"getstructs": {
+			"translation": "struct::get_array",
+			"fullAPI": "getstructs(<targetname>)",
+			"summary": "Shorter version to get structs.",
+			"mandatory1": "<targetname> targetname on radiant."
+        },
+		"getstruct": {
+			"translation": "struct::get",
+			"fullAPI": "getstruct(<targetname>)",
+			"summary": "Shorter version to get a single struct.",
+			"mandatory1": "<targetname> targetname on radiant."
+        }
+    },
+	"loads": {
+		"precache": {
+			"translation": "#precache",
+			"fullAPI": "precache(<type>, <name>)",
+			"summary": "Use to precache xmodel, fx, xanim etc...",
+			"example": "precache 'fx', 'smoke"
+		},
+		"using_animtree": {
+			"translation": "#using_animtree( 'generic')",
+			"fullAPI": "using animtree",
+			"summary": "load the generic animtree."
+		},
+		"$define": {
+            "translation": "#define",
+            "fullAPI": "$define",
+            "summary": "create a define",
+			"example": "$define SOMETHING 12345"
+        }
+	},
+	"arrays": {
+		"randomize": {
+			"translation": "array::randomize",
+			"fullAPI": "randomize(<array>)",
+			"summary": "Return a randomized array.",
+			"example": "array = randomize oldarray"
+		}
+	},
+	"triggers": {
+		"maketrigger": {
+			"translation": "j_utility::makeTriggerRadiusUse",
+			"fullAPI": "maketrigger(<origin>, <text>, [position offset])",
+			"summary": "Return a created trigger radius use on a given spot.",
+			"example": "trigger = maketriggerradiususe(player.origin, 'Press ^3&&1^7 to kill everybody')",
+			"mandatory1": "<origin> The place given as entity or vector",
+			"mandatory2": "<text> text hint of the trigger.",
+			"optional1": "Position offset to spawn."
+        }
+    },
+    "models": {
+		"spawnmodel": {
+			"translation": "util::spawn_model",
+			"fullAPI": "spawnmodel(<modelname>, <position>, [angles])",
+			"summary": "Return a spawned model on the given spot.",
+			"example": "struct.model = util::spawn_model('p7_tools_screwdriver', struct.origin, struct.angles);",
+			"mandatory1": "<modelname> the model name on APE.",
+			"mandatory2": "<position> The place given as vector",
+			"optional1": "[angles] Angles of the model as vector."
+        },
+		"jspinme": {
+			"translation": "j_utility::spinMe",
+			"fullAPI": "jspinme()",
+			"summary": "make something spin on Y axis",
+			"example": "model spinme"
+        },
+		"jfloatme": {
+			"translation": "j_utility::floatMe",
+			"fullAPI": "floatme()",
+			"summary": "make something float on Z axis",
+			"example": "model floatme"
+        }
+    },
+	"output": {
+		"print": {
+			"translation": "iprintlnbold",
+			"fullAPI": "iprintlnbold(<text>)",
+			"summary": "Print a string on screen.",
+			"mandatory1": "<text> The text you want to see on the screen."
+        },
+		"$use": {
+			"translation": "^3&&1^7",
+			"fullAPI": "$use",
+			"summary": "Convert use with ^3&&1^7 (color yellow of your use button)"
+        }
+    },
+	"FX": {
+		"jplayfx": {
+			"translation": "j_utility::playFxModel",
+			"fullAPI": "playfxon(<model or struct>, <fx>, [duration])",
+			"summary": "Return a spawned invisible model with an fx applied to it, with the given duration. Last forever if no duration is provided, or until the returned model has been deleted.",
+			"mandatory1": "<model or struct> An existing model, or struct, or a vector.",
+			"mandatory2": "<fx> string of an FX, must be precached first.",
+			"optional1": "[duration] duration in seconds, if omitted, will last forever or till deleted." 
+        }
+    },
+	"callbacks": {
+		"zombie_death_cb": {
+			"translation": "zm_spawner::register_zombie_death_event_callback",
+			"fullAPI": "zombie_death_cb(<&function>)",
+			"summary": "Call the &function when a zombie die, giving the zombie as self.",
+			"example": "zombie_death_cb(&zombie_death)",
+			"mandatory1": "<&function> The function to delegate."
+        },
+		"actor_damage_cb": {
+			"translation": "zm::register_actor_damage_callback",
+			"fullAPI": "actor_damage_cb(<&function>)",
+			"summary": "Call the &function when an actor take damage, giving the AI as self.",
+			"example": "actor_damage_cb(&zombie_damage)",
+			"mandatory1": "<&function> The function to delegate."
+        },
+		"on_spawned_cb": {
+			"translation": "callback::on_spawned",
+			"fullAPI": "on_spawned_cb(<&function>)",
+			"summary": "Call the &function when a player spawn from spectator.",
+			"example": "on_spawned_cb(&zombie_death)",
+			"mandatory1": "<&function> The function to delegate."
+        },
+		"player_damage_cb": {
+			"translation": "zm::register_player_damage_callback",
+			"fullAPI": "player_damage_cb(<&function>)",
+			"summary": "Call the &function when a player take damage.",
+			"example": "player_damage_cb(&zombie_death)",
+			"mandatory1": "<&function> The function to delegate."
+        },
+		"on_connect_cb": {
+			"translation": "callback::on_connect",
+			"fullAPI": "on_connect_cb(<&function>)",
+			"summary": "Call the &function when a player connect into the game.",
+			"example": "on_connect_cb(&zombie_death)",
+			"mandatory1": "<&function> The function to delegate."
+        }
+	},
+	"powerups": {
+		"removepowerups": {
+			"translation": "zm_spawner::register_zombie_death_event_callback",
+			"fullAPI": "removepowerups(<powerup>)",
+			"summary": "Remove a powerup from the map, don't remove them all or the map will crash.",
+			"example": "removepowerups('nuke')",
+			"mandatory1": "<powerup> The string of the powerup name: minigun, nuke, insta_kill, full_ammo"
+        }
+	},
+	"flags": {
+		"flaginit": {
+			"translation": "level flag::init",
+			"fullAPI": "flaginit(<flag_name>)",
+			"summary": "Initialize a flag on level. Auto-prepends 'level'.",
+			"example": "flaginit('power_on')",
+			"mandatory1": "<flag_name> The string name of the flag to initialize."
+		},
+		"flagset": {
+			"translation": "level flag::set",
+			"fullAPI": "flagset(<flag_name>)",
+			"summary": "Set a flag on level. Auto-prepends 'level'.",
+			"example": "flagset('power_on')",
+			"mandatory1": "<flag_name> The string name of the flag to set."
+		},
+		"flagwait": {
+			"translation": "level flag::wait_till",
+			"fullAPI": "flagwait(<flag_name>)",
+			"summary": "Wait until a flag is set on level. Auto-prepends 'level'.",
+			"example": "flagwait('power_on')",
+			"mandatory1": "<flag_name> The string name of the flag to wait for."
+		},
+		"flagclear": {
+			"translation": "level flag::wait_till_clear",
+			"fullAPI": "flagclear(<flag_name>)",
+			"summary": "Wait until a flag is cleared on level. Auto-prepends 'level'.",
+			"example": "flagclear('power_on')",
+			"mandatory1": "<flag_name> The string name of the flag to wait for clear."
+		}
+	},
+	"entities": {
+		"getent": {
+			"translation": "GetEnt",
+			"fullAPI": "getent(<name>, <key>)",
+			"summary": "Get a single entity by key/value pair.",
+			"example": "door = getent('door1', 'targetname')",
+			"mandatory1": "<name> The value to search for.",
+			"mandatory2": "<key> The key to search on (e.g. 'targetname')."
+		},
+		"getents": {
+			"translation": "GetEntArray",
+			"fullAPI": "getents(<name>, <key>)",
+			"summary": "Get an array of entities by key/value pair.",
+			"example": "doors = getents('doors', 'targetname')",
+			"mandatory1": "<name> The value to search for.",
+			"mandatory2": "<key> The key to search on (e.g. 'targetname')."
+		}
+	},
+	"sound": {
+		"playsound": {
+			"translation": "PlaySoundAtPosition",
+			"fullAPI": "playsound(<sound>, <position>)",
+			"summary": "Play a sound at a position.",
+			"example": "playsound('mus_gameover', self.origin)",
+			"mandatory1": "<sound> The sound alias to play.",
+			"mandatory2": "<position> The position (vector) to play the sound at."
+		},
+		"loopsound": {
+			"translation": "PlayLoopSound",
+			"fullAPI": "loopsound(<sound>)",
+			"summary": "Play a looping sound on an entity.",
+			"example": "model loopsound('amb_fire_loop')",
+			"mandatory1": "<sound> The sound alias to loop."
+		},
+		"stopsound": {
+			"translation": "StopLoopSound",
+			"fullAPI": "stopsound(<sound>)",
+			"summary": "Stop a looping sound on an entity.",
+			"example": "model stopsound('amb_fire_loop')",
+			"mandatory1": "<sound> The sound alias to stop."
+		}
+	},
+	"math": {
+		"randint": {
+			"translation": "RandomInt",
+			"fullAPI": "randint(<max>)",
+			"summary": "Returns a random integer from 0 to max-1.",
+			"example": "n = randint(100)",
+			"mandatory1": "<max> The exclusive upper bound."
+		},
+		"randfloat": {
+			"translation": "RandomFloatRange",
+			"fullAPI": "randfloat(<min>, <max>)",
+			"summary": "Returns a random float between min and max.",
+			"example": "f = randfloat(0.5, 2.0)",
+			"mandatory1": "<min> The minimum value.",
+			"mandatory2": "<max> The maximum value."
+		}
+	}
+}

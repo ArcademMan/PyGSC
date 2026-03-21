@@ -1,0 +1,28 @@
+{
+  "name": "pygsc",
+  "version": "0.1.0",
+  "description": "Pseudo-Python to GSC/CSC transpiler for BO3 Zombies",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "vite-plugin-solid": "^2.11.11"
+  },
+  "dependencies": {
+    "@solidjs/router": "^0.16.1",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
+    "monaco-editor": "^0.55.1",
+    "solid-js": "^1.9.11"
+  }
+}
