@@ -1,7 +1,7 @@
 import { onMount, onCleanup, createEffect, createSignal, Show, For } from "solid-js";
 import * as monaco from "monaco-editor";
 import type { OpenTab } from "../App";
-import { getApiData, getBo3Api, lint } from "../lib/transpiler";
+import { getApiData, getBo3Api, lint, lintGsc } from "../lib/transpiler";
 import {
   parseFile,
   setActiveFile,
@@ -611,6 +611,10 @@ function Editor(props: EditorProps) {
   } | null>(null);
   let dragging = false;
 
+  // Per-tab view state (scroll + cursor) — persists across tab switches
+  const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>();
+  let prevTabPath: string | null = null;
+
   function onMouseDown(e: MouseEvent) {
     e.preventDefault();
     dragging = true;
@@ -703,6 +707,9 @@ function Editor(props: EditorProps) {
       wordWrap: "off",
       renderWhitespace: "none",
       padding: { top: 8 },
+      overviewRulerLanes: 3,
+      overviewRulerBorder: true,
+      renderValidationDecorations: "on",
     });
 
     inputEditor.onDidChangeModelContent(() => {
@@ -878,10 +885,34 @@ function Editor(props: EditorProps) {
     });
   });
 
-  // Track active file for the language service URI mapping
+  // Track active file + save/restore view state on tab switch
   createEffect(() => {
     const activePath = props.activeTabPath;
-    if (activePath && inputEditor) {
+    if (!inputEditor) return;
+
+    // Save view state for the tab we're leaving
+    if (prevTabPath && prevTabPath !== activePath) {
+      viewStates.set(prevTabPath, inputEditor.saveViewState());
+    }
+
+    // Update code content
+    const newCode = props.code;
+    if (inputEditor.getValue() !== newCode) {
+      inputEditor.setValue(newCode);
+    }
+
+    // Restore view state for the tab we're entering
+    if (activePath && activePath !== prevTabPath) {
+      const savedState = viewStates.get(activePath);
+      if (savedState) {
+        inputEditor.restoreViewState(savedState);
+      }
+    }
+
+    prevTabPath = activePath;
+
+    // Update language service URI mapping
+    if (activePath) {
       const model = inputEditor.getModel();
       if (model) {
         setActiveFile(fileUri(activePath), model.uri);
@@ -890,17 +921,31 @@ function Editor(props: EditorProps) {
   });
 
   createEffect(() => {
-    const newCode = props.code;
-    if (inputEditor && inputEditor.getValue() !== newCode) {
-      inputEditor.setValue(newCode);
-    }
-  });
-
-  createEffect(() => {
     const newOutput = props.output;
     if (outputEditor && outputEditor.getValue() !== newOutput) {
       outputEditor.setValue(newOutput);
     }
+
+    // GSC structural lint — runs after output model is updated
+    const outputModel = outputEditor?.getModel();
+    if (!outputModel || !newOutput) {
+      if (outputModel) monaco.editor.setModelMarkers(outputModel, "gsc-lint", []);
+      return;
+    }
+    const gscDiags = lintGsc(newOutput);
+    const gscMarkers: monaco.editor.IMarkerData[] = gscDiags.map(d => ({
+      severity: d.severity === "error"
+        ? monaco.MarkerSeverity.Error
+        : d.severity === "warning"
+          ? monaco.MarkerSeverity.Warning
+          : monaco.MarkerSeverity.Info,
+      message: d.message,
+      startLineNumber: d.gscLine,
+      startColumn: 1,
+      endLineNumber: d.gscLine,
+      endColumn: outputModel.getLineMaxColumn(d.gscLine),
+    }));
+    monaco.editor.setModelMarkers(outputModel, "gsc-lint", gscMarkers);
   });
 
   // Listen for navigation events from App (cross-file go-to)

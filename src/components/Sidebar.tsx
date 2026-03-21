@@ -124,6 +124,14 @@ function Sidebar(props: SidebarProps) {
     });
   }
 
+  // Sync expanded dirs when restored from config (initial load is async)
+  createEffect(() => {
+    const restored = props.initialExpandedDirs;
+    if (restored && restored.length > 0) {
+      setExpandedDirs(new Set(restored));
+    }
+  });
+
   // Auto-expand project root when it changes
   createEffect(() => {
     const root = props.projectPath;

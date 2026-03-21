@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint } from "./lib/transpiler";
+import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint, lintGsc } from "./lib/transpiler";
 import { parseFile, invalidateApiNames } from "./lib/language-service";
 import { loadConfig, saveConfig, loadCustomApi, saveCustomApi, loadCustomUsings, saveCustomUsings, type AppConfig } from "./lib/settings";
 import { applyTheme, getPresetById, PRESET_THEMES } from "./lib/themes";
@@ -78,9 +78,14 @@ function App() {
           } catch { /* use raw content as fallback */ }
         }
         parseFile(fileUri(p), code);
-        // Lint all project files
+        // Lint all project files (PyGSC + GSC)
         const diagnostics = lint(code);
-        const errorCount = diagnostics.filter(d => d.severity === "error").length;
+        let errorCount = diagnostics.filter(d => d.severity === "error").length;
+        try {
+          const result = transpileWithMap(code);
+          const gscDiags = lintGsc(result.code);
+          errorCount += gscDiags.filter(d => d.severity === "error").length;
+        } catch { /* transpile error, already counted */ }
         if (errorCount > 0) errorMap[p] = errorCount;
       })
     );
@@ -209,9 +214,13 @@ function App() {
     }
     updateTab(path, { code: newCode, output, unsaved: true, lineMap });
 
-    // Run lint and track error count for this file
+    // Run lint and track error count for this file (PyGSC + GSC)
     const diagnostics = lint(newCode);
-    const errorCount = diagnostics.filter(d => d.severity === "error").length;
+    let errorCount = diagnostics.filter(d => d.severity === "error").length;
+    if (output && output !== "// Transpile error") {
+      const gscDiags = lintGsc(output);
+      errorCount += gscDiags.filter(d => d.severity === "error").length;
+    }
     setFileErrors((prev) => ({ ...prev, [path]: errorCount }));
   }
 
@@ -296,9 +305,13 @@ function App() {
       setTabs((prev) => [...prev, newTab]);
       setActiveTabPath(filePath);
 
-      // Lint the opened file
+      // Lint the opened file (PyGSC + GSC)
       const diagnostics = lint(code);
-      const errorCount = diagnostics.filter(d => d.severity === "error").length;
+      let errorCount = diagnostics.filter(d => d.severity === "error").length;
+      if (output && output !== "// Transpile error" && output !== "// Reverse transpile error") {
+        const gscDiags = lintGsc(output);
+        errorCount += gscDiags.filter(d => d.severity === "error").length;
+      }
       setFileErrors((prev) => ({ ...prev, [filePath]: errorCount }));
       if (persist) persistConfig({ last_file: filePath });
     } catch (e) {

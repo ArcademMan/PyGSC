@@ -554,14 +554,41 @@ export function transpileWithMap(pseudoCode: string): TranspileResult {
   const joinMap: number[][] = [];
   {
     let i = 0;
+    let inBlockCommentJoin = false;
     while (i < rawLines.length) {
       let current = rawLines[i];
       const origIndices = [i];
+      const trimCheck = current.trim();
+
+      // Track block comments — never join lines inside them
+      if (!inBlockCommentJoin && trimCheck.startsWith("/*")) {
+        inBlockCommentJoin = true;
+        if (trimCheck.includes("*/")) inBlockCommentJoin = false;
+        joinedLines.push(current);
+        joinMap.push(origIndices);
+        i++;
+        continue;
+      }
+      if (inBlockCommentJoin) {
+        if (trimCheck.includes("*/")) inBlockCommentJoin = false;
+        joinedLines.push(current);
+        joinMap.push(origIndices);
+        i++;
+        continue;
+      }
+
       // Keep joining while the line ends with a continuation operator
+      // or has unclosed parentheses/brackets
       while (i + 1 < rawLines.length) {
         const { cleaned } = extractStrings(current);
         const noComment = cleaned.replace(/#.*$/, "").trimEnd();
-        if (/(\b(and|or|not|minor|inequal)\s*$|[+\-*\/=<>,&|!]\s*$)/.test(noComment)) {
+        // Check if parentheses/brackets are unclosed
+        let parenDepth = 0;
+        for (const c of cleaned) {
+          if (c === "(" || c === "[") parenDepth++;
+          else if (c === ")" || c === "]") parenDepth--;
+        }
+        if (parenDepth > 0 || /(\b(and|or|not|minor|inequal)\s*$|(?<![+\-])[+\-*\/=<>,&|!]\s*$)/.test(noComment)) {
           i++;
           origIndices.push(i);
           current = current.trimEnd() + " " + rawLines[i].trim();
@@ -585,12 +612,12 @@ export function transpileWithMap(pseudoCode: string): TranspileResult {
     // Track block comments — pass through without translation
     if (!inBlockCommentPhase1 && stripped.startsWith("/*")) {
       inBlockCommentPhase1 = true;
-      if (stripped.endsWith("*/")) inBlockCommentPhase1 = false;
+      if (stripped.includes("*/")) inBlockCommentPhase1 = false;
       translatedLines.push(line);
       continue;
     }
     if (inBlockCommentPhase1) {
-      if (stripped.endsWith("*/")) inBlockCommentPhase1 = false;
+      if (stripped.includes("*/")) inBlockCommentPhase1 = false;
       translatedLines.push(line);
       continue;
     }
@@ -677,11 +704,11 @@ export function transpileWithMap(pseudoCode: string): TranspileResult {
     }
     if (!inBlockComment && stripped.startsWith("/*")) {
       inBlockComment = true;
-      if (stripped.endsWith("*/")) inBlockComment = false;
+      if (stripped.includes("*/")) inBlockComment = false;
       continue;
     }
     if (inBlockComment) {
-      if (stripped.endsWith("*/")) inBlockComment = false;
+      if (stripped.includes("*/")) inBlockComment = false;
       continue;
     }
 
@@ -880,6 +907,7 @@ function ensureBracketsWithMap(gscCode: string): { code: string; lineMap: number
   const switchCaseIndentStack: number[] = []; // indent levels of case labels (no brace opened)
   const doBlockIndentStack: number[] = []; // indent levels where a 'do' block was opened
 
+  let inBlockCommentBrackets = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const stripped = line.trim();
@@ -887,6 +915,25 @@ function ensureBracketsWithMap(gscCode: string): { code: string; lineMap: number
     // Buffer empty lines — don't emit yet
     if (!stripped) {
       blankBuffer.push({ inputIdx: i });
+      continue;
+    }
+
+    // Pass block comments through without brace insertion
+    if (!inBlockCommentBrackets && stripped.startsWith("/*")) {
+      inBlockCommentBrackets = true;
+      for (const bl of blankBuffer) { lineMap[bl.inputIdx] = newLines.length; newLines.push(""); }
+      blankBuffer = [];
+      lineMap[i] = newLines.length;
+      newLines.push(line);
+      if (stripped.includes("*/")) inBlockCommentBrackets = false;
+      continue;
+    }
+    if (inBlockCommentBrackets) {
+      for (const bl of blankBuffer) { lineMap[bl.inputIdx] = newLines.length; newLines.push(""); }
+      blankBuffer = [];
+      lineMap[i] = newLines.length;
+      newLines.push(line);
+      if (stripped.includes("*/")) inBlockCommentBrackets = false;
       continue;
     }
 
@@ -1029,7 +1076,12 @@ function ensureBracketsWithMap(gscCode: string): { code: string; lineMap: number
 }
 
 function startsWithAny(text: string, prefixes: string[]): boolean {
-  return prefixes.some((p) => text.startsWith(p));
+  return prefixes.some((p) => {
+    if (!text.startsWith(p)) return false;
+    // Ensure it's a whole word — next char must be non-word or end of string
+    const next = text[p.length];
+    return next === undefined || /\W/.test(next);
+  });
 }
 
 function escapeRegex(str: string): string {
@@ -1420,14 +1472,17 @@ function countBo3Params(fn: Bo3Function): { min: number; max: number } {
       mandatory++;
     }
   }
-  // Also count from mandatory/optional fields
-  let i = 1;
-  while (fn[`mandatory${i}`]) i++;
-  const mandatoryCount = Math.max(mandatory, i - 1);
-  i = 1;
-  while (fn[`optional${i}`]) i++;
-  const optionalCount = Math.max(optional, i - 1);
-  return { min: mandatoryCount, max: mandatoryCount + optionalCount };
+  // Count optionalN fields — these are more reliable than mandatoryN
+  // because the signature often forgets to use [] for optional params.
+  let fieldOptionals = 0;
+  let oi = 1;
+  while (fn[`optional${oi}`]) { fieldOptionals++; oi++; }
+
+  // Use the higher of: optionals from signature vs optionals from fields
+  const totalParams = mandatory + optional;
+  const realOptional = Math.max(optional, fieldOptionals);
+  const realMandatory = Math.max(0, totalParams - realOptional);
+  return { min: realMandatory, max: totalParams };
 }
 
 /** Count arguments in a function call (respects nested parens and strings) */
@@ -1518,7 +1573,13 @@ export function lint(source: string): LintDiagnostic[] {
       while (i + 1 < rawLines.length) {
         const { cleaned } = extractStrings(current);
         const noComment = cleaned.replace(/#.*$/, "").trimEnd();
-        if (/(\b(and|or|not|minor|inequal)\s*$|[+\-*\/=<>,&|!]\s*$)/.test(noComment)) {
+        // Check if parentheses/brackets are unclosed
+        let parenDepth = 0;
+        for (const c of cleaned) {
+          if (c === "(" || c === "[") parenDepth++;
+          else if (c === ")" || c === "]") parenDepth--;
+        }
+        if (parenDepth > 0 || /(\b(and|or|not|minor|inequal)\s*$|(?<![+\-])[+\-*\/=<>,&|!]\s*$)/.test(noComment)) {
           i++;
           current = current.trimEnd() + " " + rawLines[i].trim();
         } else {
@@ -1808,6 +1869,142 @@ export function lint(source: string): LintDiagnostic[] {
         message: `waittill in "${scope.name}" without endon — potential thread leak`,
         severity: "warning",
       });
+    }
+  }
+
+  return diagnostics;
+}
+
+// ══════════════════════════════════════════════
+// GSC-SIDE LINT (structural checks on transpiled output)
+// ══════════════════════════════════════════════
+
+export interface GscDiagnostic {
+  gscLine: number;    // 1-based line in the GSC output
+  message: string;
+  severity: "warning" | "info" | "error";
+}
+
+/**
+ * Validates the transpiled GSC output for structural syntax issues.
+ * Returns diagnostics with GSC line numbers (for display on the GSC editor).
+ */
+export function lintGsc(gscCode: string): GscDiagnostic[] {
+  const diagnostics: GscDiagnostic[] = [];
+  const lines = gscCode.split("\n");
+
+  // Helper: strip strings and comments from a line for analysis
+  function cleanLine(raw: string): string {
+    const { cleaned } = extractStrings(raw);
+    return cleaned.replace(/\/\/.*$/, "");
+  }
+
+  // ── 1. Unbalanced braces across the whole file ──
+  let braceDepth = 0;
+  let lastOpenBraceLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const cl = cleanLine(lines[i]);
+    for (const c of cl) {
+      if (c === "{") { braceDepth++; lastOpenBraceLine = i; }
+      else if (c === "}") { braceDepth--; }
+    }
+    if (braceDepth < 0) {
+      diagnostics.push({
+        gscLine: i + 1,
+        message: "[GSC] \"}\" senza \"{\" corrispondente",
+        severity: "error",
+      });
+      braceDepth = 0;
+    }
+  }
+  if (braceDepth > 0) {
+    diagnostics.push({
+      gscLine: lastOpenBraceLine + 1,
+      message: `[GSC] ${braceDepth} \"{\" non chiuse`,
+      severity: "error",
+    });
+  }
+
+  // ── 2. Unbalanced parentheses per line ──
+  for (let i = 0; i < lines.length; i++) {
+    const cl = cleanLine(lines[i]);
+    let depth = 0;
+    for (const c of cl) {
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+    }
+    if (depth !== 0) {
+      diagnostics.push({
+        gscLine: i + 1,
+        message: depth > 0
+          ? `[GSC] ${depth} "(" non chiuse`
+          : `[GSC] ${-depth} ")" inaspettate`,
+        severity: "error",
+      });
+    }
+  }
+
+  // ── 3. Statement-level keywords mid-line ──
+  // In valid GSC, keywords like if/while/for/else/switch/return/break/continue
+  // must be at the start of a statement (start of line after optional whitespace).
+  // If they appear after other code, two statements got merged.
+  const stmtKeywords = /\b(if|while|for|foreach|else|switch|return|break|continue|do)\b/;
+  for (let i = 0; i < lines.length; i++) {
+    const cl = cleanLine(lines[i]);
+    const trimmed = cl.trim();
+    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("#")) continue;
+
+    // Skip if line starts with the keyword (correct usage)
+    if (stmtKeywords.test(trimmed) && /^(if|while|for|foreach|else|switch|return|break|continue|do|} while|} else)\b/.test(trimmed)) continue;
+    // Skip lines starting with } (like "} else {" or "} while (...);")
+    if (trimmed.startsWith("}")) continue;
+
+    // Check if a keyword appears after some code
+    // Find the keyword NOT at position 0
+    const match = trimmed.match(/\S+\s+.*?\b(if|while|for|foreach|else|switch|return|break|continue|do)\b/);
+    if (match) {
+      const kw = match[1];
+      // Exclude: "} while" (do-while), function calls containing keywords in names
+      // Only flag if the keyword is preceded by something that looks like a statement
+      const kwIdx = trimmed.lastIndexOf(kw);
+      const before = trimmed.substring(0, kwIdx).trim();
+      // Skip if before is empty or is just ")" (part of condition)
+      if (before && before !== ")" && !/[,(]$/.test(before)) {
+        diagnostics.push({
+          gscLine: i + 1,
+          message: `[GSC] "${kw}" dopo altro codice sulla stessa riga — possibili statement uniti`,
+          severity: "error",
+        });
+      }
+    }
+  }
+
+  // ── 5. function declaration without valid signature ──
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (/^function\b/.test(trimmed)) {
+      if (!/^function\s+(autoexec\s+)?\w+\s*\(/.test(trimmed)) {
+        diagnostics.push({
+          gscLine: i + 1,
+          message: `[GSC] Dichiarazione "function" non valida`,
+          severity: "error",
+        });
+      }
+    }
+  }
+
+  // ── 6. Unreachable code after return ──
+  for (let i = 0; i < lines.length - 1; i++) {
+    const trimmed = lines[i].trim();
+    if (/^return\b/.test(trimmed) && trimmed.endsWith(";")) {
+      const next = lines[i + 1]?.trim();
+      if (next && next !== "}" && !next.startsWith("//") && !next.startsWith("case") && !next.startsWith("default")) {
+        diagnostics.push({
+          gscLine: i + 2,
+          message: `[GSC] Codice irraggiungibile dopo "return"`,
+          severity: "warning",
+        });
+      }
     }
   }
 

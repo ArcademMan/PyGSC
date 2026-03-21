@@ -690,7 +690,7 @@
 			"optional6": "[actor] specific actor archetype to spawn."
 		},
 		"aisetgoal": {
-			"translation": "j_ai::aiSetGoal",
+			"translation": "j_utility::aiSetGoal",
 			"fullAPI": "aisetgoal(<goal>)",
 			"summary": "Set the AI destination to move to.",
 			"example": "ai thr aisetgoal(destination.origin)",
@@ -711,7 +711,7 @@
 			"example": "ai thr aistopfollow"
 		},
 		"aisetfake": {
-			"translation": "j_ai::aiSetFake",
+			"translation": "j_utility::aiSetFake",
 			"fullAPI": "aisetfake(<model>, [speed], [offset], [pushable])",
 			"summary": "Replace the AI visual with a custom model while keeping AI logic.",
 			"example": "ai thr aisetfake('my_model', 1.0, (0,0,0), true)",
@@ -721,7 +721,7 @@
 			"optional3": "[pushable] if true, players can push the fake model."
 		},
 		"aisetfakeanim": {
-			"translation": "j_ai::aiSetFakeAnim",
+			"translation": "j_utility::aiSetFakeAnim",
 			"fullAPI": "aisetfakeanim(<walk>, <idle>, <attack>, <death>)",
 			"summary": "Set custom animations for a fake AI model.",
 			"example": "ai thr aisetfakeanim('walk_anim', 'idle_anim', 'attack_anim', 'death_anim')",
