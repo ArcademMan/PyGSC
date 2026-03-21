@@ -332,6 +332,28 @@ export function findReferencesTo(fn: FunctionSymbol): SymbolReference[] {
   return results;
 }
 
+/** Return all available namespace identifiers (namespace directives + filenames) */
+export function getAvailableNamespaces(): { label: string; fileName: string; uri: string }[] {
+  const result: { label: string; fileName: string; uri: string }[] = [];
+  const seen = new Set<string>();
+  for (const info of fileIndex.values()) {
+    for (const ns of getFileNamespaces(info)) {
+      if (!seen.has(ns)) {
+        seen.add(ns);
+        result.push({ label: ns, fileName: info.fileName, uri: info.uri });
+      }
+    }
+  }
+  return result;
+}
+
+/** Return callable (non-autoexec) functions for a given namespace */
+export function getFunctionsForNamespace(ns: string): FunctionSymbol[] {
+  const target = resolveNamespace(ns);
+  if (!target) return [];
+  return target.functions.filter((f) => f.kind === "def");
+}
+
 export function getAllFunctions(uri?: string): FunctionSymbol[] {
   if (uri) {
     const info = fileIndex.get(uri);

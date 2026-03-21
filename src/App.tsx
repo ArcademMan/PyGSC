@@ -81,11 +81,19 @@ function App() {
         // Lint all project files (PyGSC + GSC)
         const diagnostics = lint(code);
         let errorCount = diagnostics.filter(d => d.severity === "error").length;
-        try {
-          const result = transpileWithMap(code);
-          const gscDiags = lintGsc(result.code);
+        // For GSC/CSC files, lint the original content directly (not round-tripped)
+        // to stay consistent with openFile and avoid false positives from
+        // reverse→forward transpile discrepancies.
+        if (isGscFile(p)) {
+          const gscDiags = lintGsc(content);
           errorCount += gscDiags.filter(d => d.severity === "error").length;
-        } catch { /* transpile error, already counted */ }
+        } else {
+          try {
+            const result = transpileWithMap(code);
+            const gscDiags = lintGsc(result.code);
+            errorCount += gscDiags.filter(d => d.severity === "error").length;
+          } catch { /* transpile error, already counted */ }
+        }
         if (errorCount > 0) errorMap[p] = errorCount;
       })
     );
@@ -199,6 +207,9 @@ function App() {
   function handleCodeChange(newCode: string) {
     const path = activeTabPath();
     if (!path) return;
+    // Skip if the code hasn't actually changed (e.g. programmatic setValue on tab switch)
+    const currentTab = tabs().find((t) => t.path === path);
+    if (currentTab && currentTab.code === newCode) return;
     if (suppressUnsaved) {
       suppressUnsaved = false;
       return;
