@@ -1,8 +1,22 @@
-import { createSignal, Show, For, onCleanup } from "solid-js";
+import { createSignal, createEffect, Show, For, onCleanup } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
-import { getApiData, getBo3Api, type Bo3Function } from "../lib/transpiler";
+import { getApiData, getBo3Api, getCustomApiEntries, type Bo3Function } from "../lib/transpiler";
 import { PRESET_THEMES } from "../lib/themes";
 import type { FileEntry } from "../App";
+
+export interface CustomApiEntry {
+  keyword: string;
+  translation: string;
+  category: string;
+  summary?: string;
+  fullAPI?: string;
+  example?: string;
+}
+
+export interface CustomUsingEntry {
+  namespace: string;
+  usingPath: string;
+}
 
 interface SidebarProps {
   fileTree: FileEntry[];
@@ -21,6 +35,15 @@ interface SidebarProps {
   onCopyPath: (src: string, dest: string) => void;
   onRefresh: () => void;
   onOpenApiReference: (functionName?: string) => void;
+  onAddCustomApi?: (entry: CustomApiEntry) => void;
+  onDeleteCustomApi?: (category: string, keyword: string) => void;
+  onAddCustomUsing?: (entry: CustomUsingEntry) => void;
+  onDeleteCustomUsing?: (namespace: string) => void;
+  initialPanelWidth?: number;
+  onPanelWidthChange?: (width: number) => void;
+  initialExpandedDirs?: string[];
+  onExpandedDirsChange?: (dirs: string[]) => void;
+  fileErrors?: Record<string, number>;
 }
 
 type PanelId = "explorer" | "api" | "themes" | null;
@@ -37,12 +60,17 @@ function Sidebar(props: SidebarProps) {
   const [activePanel, setActivePanel] = createSignal<PanelId>("explorer");
   const [apiSearch, setApiSearch] = createSignal("");
   const [expandedCategories, setExpandedCategories] = createSignal<Set<string>>(new Set());
-  const [expandedDirs, setExpandedDirs] = createSignal<Set<string>>(new Set());
+  const [expandedDirs, setExpandedDirs] = createSignal<Set<string>>(
+    new Set(props.initialExpandedDirs ?? [])
+  );
   const [contextMenu, setContextMenu] = createSignal<ContextMenu | null>(null);
   const [inlineInput, setInlineInput] = createSignal<{ parentDir: string; type: "file" | "folder"; ext?: string } | null>(null);
   const [renaming, setRenaming] = createSignal<{ path: string; name: string } | null>(null);
   const [clipboard, setClipboard] = createSignal<{ path: string; op: "copy" | "cut" } | null>(null);
-  const [panelWidth, setPanelWidth] = createSignal(260);
+  const [panelWidth, setPanelWidth] = createSignal(props.initialPanelWidth ?? 260);
+  const [showAddApi, setShowAddApi] = createSignal(false);
+  const [showAddUsing, setShowAddUsing] = createSignal(false);
+  const [customApiVersion, setCustomApiVersion] = createSignal(0);
 
   // Close context menu on click anywhere
   function handleGlobalClick() { setContextMenu(null); }
@@ -68,6 +96,7 @@ function Sidebar(props: SidebarProps) {
       document.body.style.userSelect = "";
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
+      props.onPanelWidthChange?.(panelWidth());
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -89,9 +118,23 @@ function Sidebar(props: SidebarProps) {
     setExpandedDirs((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path); else next.add(path);
+      // Notify parent for persistence
+      props.onExpandedDirsChange?.([...next]);
       return next;
     });
   }
+
+  // Auto-expand project root when it changes
+  createEffect(() => {
+    const root = props.projectPath;
+    if (root && !expandedDirs().has(root)) {
+      setExpandedDirs((prev) => {
+        const next = new Set(prev);
+        next.add(root);
+        return next;
+      });
+    }
+  });
 
   function isExpanded(path: string) { return expandedDirs().has(path); }
 
@@ -214,7 +257,16 @@ function Sidebar(props: SidebarProps) {
     );
   }
 
+  function isCustomApiEntry(category: string, key: string): boolean {
+    // Force reactivity on customApiVersion
+    void customApiVersion();
+    const custom = getCustomApiEntries();
+    return !!custom[category]?.[key];
+  }
+
   function filteredApi() {
+    // Force re-read when custom entries change
+    void customApiVersion();
     const search = apiSearch().toLowerCase();
     const data = getApiData();
     const result: Record<string, Record<string, { translation: string; summary?: string; fullAPI?: string }>> = {};
@@ -246,6 +298,20 @@ function Sidebar(props: SidebarProps) {
     );
   }
 
+  /** Count total errors in a directory (recursively) */
+  function dirErrorCount(entry: FileEntry): number {
+    if (!entry.is_dir || !entry.children || !props.fileErrors) return 0;
+    let total = 0;
+    for (const child of entry.children) {
+      if (child.is_dir) {
+        total += dirErrorCount(child);
+      } else {
+        total += props.fileErrors[child.path] ?? 0;
+      }
+    }
+    return total;
+  }
+
   function FileTreeNode(nodeProps: { entry: FileEntry; depth: number }) {
     const isOpen = () => isExpanded(nodeProps.entry.path);
     const isActive = () => props.currentFile === nodeProps.entry.path;
@@ -271,6 +337,9 @@ function Sidebar(props: SidebarProps) {
             </Show>
             <Show when={isRenaming()}>
               <InlineInputField defaultValue={renaming()!.name} onCommit={commitRename} placeholder="new name" />
+            </Show>
+            <Show when={dirErrorCount(nodeProps.entry) > 0}>
+              <span class="file-error-dot" title={`${dirErrorCount(nodeProps.entry)} error(s) in folder`} />
             </Show>
           </div>
           <Show when={isOpen()}>
@@ -304,6 +373,9 @@ function Sidebar(props: SidebarProps) {
         </Show>
         <Show when={isRenaming()}>
           <InlineInputField defaultValue={renaming()!.name} onCommit={commitRename} placeholder="new name" />
+        </Show>
+        <Show when={(props.fileErrors?.[nodeProps.entry.path] ?? 0) > 0}>
+          <span class="file-error-dot" title={`${props.fileErrors![nodeProps.entry.path]} error(s)`} />
         </Show>
       </div>
     );
@@ -404,15 +476,87 @@ function Sidebar(props: SidebarProps) {
           <Show when={activePanel() === "api"}>
             <div class="panel-title-bar">
               <span class="panel-title">API REFERENCE</span>
-              <button class="icon-btn" onClick={() => props.onOpenApiReference()} title="Open Full API Page">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </button>
+              <div style={{ display: "flex", gap: "2px" }}>
+                <button class="icon-btn" onClick={() => { setShowAddApi(!showAddApi()); setShowAddUsing(false); }} title="Add Custom API">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </button>
+                <button class="icon-btn" onClick={() => props.onOpenApiReference()} title="Open Full API Page">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="panel-body">
+              {/* Add Custom API Form */}
+              <Show when={showAddApi()}>
+                <div class="custom-api-form">
+                  <div class="custom-api-form-tabs">
+                    <button class={`custom-api-tab ${!showAddUsing() ? "active" : ""}`}
+                      onClick={() => setShowAddUsing(false)}>API Shortcut</button>
+                    <button class={`custom-api-tab ${showAddUsing() ? "active" : ""}`}
+                      onClick={() => setShowAddUsing(true)}>Using</button>
+                  </div>
+                  <Show when={!showAddUsing()}>
+                    {(() => {
+                      const [keyword, setKeyword] = createSignal("");
+                      const [translation, setTranslation] = createSignal("");
+                      const [category, setCategory] = createSignal("custom");
+                      const [summary, setSummary] = createSignal("");
+                      function handleSubmit() {
+                        const kw = keyword().trim();
+                        const tr = translation().trim();
+                        if (!kw || !tr) return;
+                        props.onAddCustomApi?.({
+                          keyword: kw, translation: tr,
+                          category: category().trim() || "custom",
+                          summary: summary().trim() || undefined,
+                        });
+                        setKeyword(""); setTranslation(""); setSummary("");
+                        setCustomApiVersion((v) => v + 1);
+                      }
+                      return (
+                        <div class="custom-api-fields">
+                          <input placeholder="Keyword (e.g. myshortcut)" value={keyword()} onInput={(e) => setKeyword(e.currentTarget.value)} />
+                          <input placeholder="Translation (e.g. zm_utility::do_thing)" value={translation()} onInput={(e) => setTranslation(e.currentTarget.value)} />
+                          <input placeholder="Category (default: custom)" value={category()} onInput={(e) => setCategory(e.currentTarget.value)} />
+                          <input placeholder="Summary (optional)" value={summary()} onInput={(e) => setSummary(e.currentTarget.value)} />
+                          <button class="btn btn-add-custom" onClick={handleSubmit}>Add</button>
+                        </div>
+                      );
+                    })()}
+                  </Show>
+                  <Show when={showAddUsing()}>
+                    {(() => {
+                      const [ns, setNs] = createSignal("");
+                      const [uPath, setUPath] = createSignal("");
+                      function handleSubmit() {
+                        const nsVal = ns().trim();
+                        const pathVal = uPath().trim();
+                        if (!nsVal || !pathVal) return;
+                        props.onAddCustomUsing?.({
+                          namespace: nsVal.endsWith("::") ? nsVal : nsVal + "::",
+                          usingPath: pathVal.startsWith("#using ") ? pathVal : `#using ${pathVal}`,
+                        });
+                        setNs(""); setUPath("");
+                        setCustomApiVersion((v) => v + 1);
+                      }
+                      return (
+                        <div class="custom-api-fields">
+                          <input placeholder="Namespace (e.g. mymod::)" value={ns()} onInput={(e) => setNs(e.currentTarget.value)} />
+                          <input placeholder="Using path (e.g. scripts\zm\_mymod)" value={uPath()} onInput={(e) => setUPath(e.currentTarget.value)} />
+                          <button class="btn btn-add-custom" onClick={handleSubmit}>Add</button>
+                        </div>
+                      );
+                    })()}
+                  </Show>
+                </div>
+              </Show>
+
               <input class="api-search" placeholder="Search API..."
                 value={apiSearch()} onInput={(e) => setApiSearch(e.currentTarget.value)} />
               <div class="api-list">
@@ -430,12 +574,20 @@ function Sidebar(props: SidebarProps) {
                       <Show when={expandedCategories().has(category)}>
                         <For each={Object.entries(entries)}>
                           {([key, val]) => (
-                            <div class="api-item">
+                            <div class={`api-item ${isCustomApiEntry(category, key) ? "api-item-custom" : ""}`}>
                               <div class="api-item-name">{key}</div>
                               <div class="api-item-arrow">{"\u2192"}</div>
                               <div class="api-item-translation">{val.translation}</div>
                               <Show when={val.summary}>
                                 <div class="api-item-summary">{val.summary}</div>
+                              </Show>
+                              <Show when={isCustomApiEntry(category, key)}>
+                                <button class="api-item-delete" title="Remove custom entry"
+                                  onClick={(e) => { e.stopPropagation(); props.onDeleteCustomApi?.(category, key); setCustomApiVersion((v) => v + 1); }}>
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                  </svg>
+                                </button>
                               </Show>
                             </div>
                           )}

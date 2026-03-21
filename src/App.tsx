@@ -1,7 +1,9 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { transpileWithMap, reverseTranspile } from "./lib/transpiler";
-import { loadConfig, saveConfig, type AppConfig } from "./lib/settings";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint } from "./lib/transpiler";
+import { parseFile, invalidateApiNames } from "./lib/language-service";
+import { loadConfig, saveConfig, loadCustomApi, saveCustomApi, loadCustomUsings, saveCustomUsings, type AppConfig } from "./lib/settings";
 import { applyTheme, getPresetById, PRESET_THEMES } from "./lib/themes";
 import Sidebar from "./components/Sidebar";
 import Editor from "./components/Editor";
@@ -25,13 +27,67 @@ export interface OpenTab {
   lineMap?: number[];
 }
 
+/** Convert a file path to a stable URI for the language service */
+function fileUri(path: string): string {
+  return "file:///" + path.replace(/\\/g, "/");
+}
+
+/** Collect all script file paths (.pygsc, .gsc, .csc) from a file tree */
+function collectScriptPaths(entries: FileEntry[]): string[] {
+  const paths: string[] = [];
+  const exts = [".pygsc", ".gsc", ".csc"];
+  function walk(items: FileEntry[]) {
+    for (const e of items) {
+      if (e.is_dir) {
+        if (e.children) walk(e.children);
+      } else if (exts.some((ext) => e.name.endsWith(ext))) {
+        paths.push(e.path);
+      }
+    }
+  }
+  walk(entries);
+  return paths;
+}
+
 function App() {
   const [tabs, setTabs] = createSignal<OpenTab[]>([]);
   const [activeTabPath, setActiveTabPath] = createSignal<string | null>(null);
   const [projectPath, setProjectPath] = createSignal<string | null>(null);
   const [fileTree, setFileTree] = createSignal<FileEntry[]>([]);
   const [activeTheme, setActiveTheme] = createSignal("steam-dark");
+  const [sidebarWidth, setSidebarWidth] = createSignal(260);
+  const [editorSplit, setEditorSplit] = createSignal(50);
+  const [expandedDirs, setExpandedDirs] = createSignal<string[]>([]);
+  const [fileErrors, setFileErrors] = createSignal<Record<string, number>>({});
   let suppressUnsaved = false;
+  let configLoaded = false;
+
+  /** Read and parse all script files in the project for IntelliSense */
+  async function indexProjectFiles(entries: FileEntry[]) {
+    const paths = collectScriptPaths(entries);
+    const errorMap: Record<string, number> = {};
+    // Read files in parallel, parse each for language service + lint
+    const results = await Promise.allSettled(
+      paths.map(async (p) => {
+        const content = await invoke<string>("read_file", { path: p });
+        // For GSC/CSC files, reverse-transpile to PyGSC so line numbers match the editor
+        let code = content;
+        if (isGscFile(p)) {
+          try {
+            code = reverseTranspile(content);
+          } catch { /* use raw content as fallback */ }
+        }
+        parseFile(fileUri(p), code);
+        // Lint all project files
+        const diagnostics = lint(code);
+        const errorCount = diagnostics.filter(d => d.severity === "error").length;
+        if (errorCount > 0) errorMap[p] = errorCount;
+      })
+    );
+    setFileErrors((prev) => ({ ...prev, ...errorMap }));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) console.warn(`Language service: failed to index ${failed} files`);
+  }
 
   // Helpers
   function getActiveTab(): OpenTab | undefined {
@@ -54,10 +110,15 @@ function App() {
 
   // Config persistence
   async function persistConfig(partial: Partial<AppConfig>) {
+    if (!configLoaded) return;
     const current: AppConfig = {
       theme: activeTheme(),
       last_project: projectPath(),
       last_file: activeTabPath(),
+      open_tabs: tabs().filter((t) => t.type !== "api-reference").map((t) => t.path),
+      sidebar_width: sidebarWidth(),
+      editor_split: editorSplit(),
+      expanded_dirs: expandedDirs(),
       ...partial,
     };
     try {
@@ -78,6 +139,25 @@ function App() {
   onMount(async () => {
     document.addEventListener("keydown", handleKeyDown);
 
+    // Load custom API/usings before anything else
+    try {
+      const [customApiStr, customUsingsStr] = await Promise.all([
+        loadCustomApi(),
+        loadCustomUsings(),
+      ]);
+      const customApi = JSON.parse(customApiStr);
+      const customUsings = JSON.parse(customUsingsStr);
+      if (Object.keys(customApi).length > 0) {
+        mergeCustomApi(customApi);
+        invalidateApiNames();
+      }
+      if (Object.keys(customUsings).length > 0) {
+        mergeCustomUsings(customUsings);
+      }
+    } catch (e) {
+      console.warn("Failed to load custom API data:", e);
+    }
+
     try {
       const config = await loadConfig();
       const preset = getPresetById(config.theme);
@@ -85,15 +165,25 @@ function App() {
         applyTheme(preset.colors);
         setActiveTheme(preset.id);
       }
+      if (config.sidebar_width) setSidebarWidth(config.sidebar_width);
+      if (config.editor_split) setEditorSplit(config.editor_split);
+      if (config.expanded_dirs?.length) setExpandedDirs(config.expanded_dirs);
       if (config.last_project) {
         await openProject(config.last_project, false);
       }
-      if (config.last_file) {
-        await openFile(config.last_file, false);
+      // Restore all previously open tabs
+      const tabsToOpen = config.open_tabs || [];
+      for (const tabPath of tabsToOpen) {
+        await openFile(tabPath, false);
+      }
+      // Switch to the last active tab
+      if (config.last_file && tabs().some((t) => t.path === config.last_file)) {
+        setActiveTabPath(config.last_file);
       }
     } catch {
       applyTheme(PRESET_THEMES[0].colors);
     }
+    configLoaded = true;
   });
 
   onCleanup(() => {
@@ -118,6 +208,11 @@ function App() {
       output = "// Transpile error";
     }
     updateTab(path, { code: newCode, output, unsaved: true, lineMap });
+
+    // Run lint and track error count for this file
+    const diagnostics = lint(newCode);
+    const errorCount = diagnostics.filter(d => d.severity === "error").length;
+    setFileErrors((prev) => ({ ...prev, [path]: errorCount }));
   }
 
   // Project operations
@@ -127,6 +222,8 @@ function App() {
       setProjectPath(path);
       setFileTree(entries);
       if (persist) persistConfig({ last_project: path });
+      // Index all .pygsc files for cross-file IntelliSense
+      indexProjectFiles(entries);
     } catch (e) {
       console.error("Failed to read directory:", e);
     }
@@ -138,6 +235,8 @@ function App() {
       try {
         const entries = await invoke<FileEntry[]>("read_directory", { path });
         setFileTree(entries);
+        // Re-index after refresh (new/deleted files)
+        indexProjectFiles(entries);
       } catch (e) {
         console.error("Failed to refresh:", e);
       }
@@ -196,6 +295,11 @@ function App() {
       suppressUnsaved = true;
       setTabs((prev) => [...prev, newTab]);
       setActiveTabPath(filePath);
+
+      // Lint the opened file
+      const diagnostics = lint(code);
+      const errorCount = diagnostics.filter(d => d.severity === "error").length;
+      setFileErrors((prev) => ({ ...prev, [filePath]: errorCount }));
       if (persist) persistConfig({ last_file: filePath });
     } catch (e) {
       console.error("Failed to read file:", e);
@@ -229,14 +333,18 @@ function App() {
     }
   }
 
-  function closeTab(path: string) {
+  async function closeTab(path: string) {
     const tabList = tabs();
     const idx = tabList.findIndex((t) => t.path === path);
     if (idx === -1) return;
 
     const tab = tabList[idx];
     if (tab.unsaved) {
-      if (!confirm(`"${tab.name}" has unsaved changes. Close anyway?`)) return;
+      const confirmed = await ask(`"${tab.name}" has unsaved changes. Close anyway?`, {
+        title: "Unsaved Changes",
+        kind: "warning",
+      });
+      if (!confirmed) return;
     }
 
     const newTabs = tabList.filter((t) => t.path !== path);
@@ -247,9 +355,13 @@ function App() {
       if (newTabs.length > 0) {
         const newIdx = Math.min(idx, newTabs.length - 1);
         setActiveTabPath(newTabs[newIdx].path);
+        persistConfig({ last_file: newTabs[newIdx].path });
       } else {
         setActiveTabPath(null);
+        persistConfig({ last_file: null });
       }
+    } else {
+      persistConfig({});
     }
   }
 
@@ -358,6 +470,66 @@ function App() {
     }
   }
 
+  // Custom API management
+  async function addCustomApi(entry: { keyword: string; translation: string; category: string; summary?: string; fullAPI?: string; example?: string }) {
+    try {
+      const raw = await loadCustomApi();
+      const custom = JSON.parse(raw);
+      if (!custom[entry.category]) custom[entry.category] = {};
+      custom[entry.category][entry.keyword] = {
+        translation: entry.translation,
+        ...(entry.summary ? { summary: entry.summary } : {}),
+        ...(entry.fullAPI ? { fullAPI: entry.fullAPI } : {}),
+        ...(entry.example ? { example: entry.example } : {}),
+      };
+      await saveCustomApi(JSON.stringify(custom, null, 2));
+      mergeCustomApi(custom);
+      invalidateApiNames();
+    } catch (e) {
+      console.error("Failed to add custom API:", e);
+    }
+  }
+
+  async function deleteCustomApi(category: string, keyword: string) {
+    try {
+      const raw = await loadCustomApi();
+      const custom = JSON.parse(raw);
+      if (custom[category]) {
+        delete custom[category][keyword];
+        if (Object.keys(custom[category]).length === 0) delete custom[category];
+      }
+      await saveCustomApi(JSON.stringify(custom, null, 2));
+      mergeCustomApi(custom);
+      invalidateApiNames();
+    } catch (e) {
+      console.error("Failed to delete custom API:", e);
+    }
+  }
+
+  async function addCustomUsing(entry: { namespace: string; usingPath: string }) {
+    try {
+      const raw = await loadCustomUsings();
+      const custom = JSON.parse(raw);
+      custom[entry.namespace] = entry.usingPath;
+      await saveCustomUsings(JSON.stringify(custom, null, 2));
+      mergeCustomUsings(custom);
+    } catch (e) {
+      console.error("Failed to add custom using:", e);
+    }
+  }
+
+  async function deleteCustomUsing(namespace: string) {
+    try {
+      const raw = await loadCustomUsings();
+      const custom = JSON.parse(raw);
+      delete custom[namespace];
+      await saveCustomUsings(JSON.stringify(custom, null, 2));
+      mergeCustomUsings(custom);
+    } catch (e) {
+      console.error("Failed to delete custom using:", e);
+    }
+  }
+
   // Derived state for Editor
   function activeCode(): string {
     return getActiveTab()?.code ?? "";
@@ -369,6 +541,28 @@ function App() {
 
   function activeLineMap(): number[] | undefined {
     return getActiveTab()?.lineMap;
+  }
+
+  /** Navigate to a specific file, line, and column (used by IntelliSense) */
+  let pendingNavigation: { line: number; col: number } | null = null;
+
+  async function navigateToFile(filePath: string, line: number, col: number) {
+    const currentPath = activeTabPath();
+    if (currentPath === filePath) {
+      // Same file: just emit a navigation event
+      window.dispatchEvent(new CustomEvent("pygsc-navigate", { detail: { line, col } }));
+      return;
+    }
+    // Store pending navigation, open the file, then navigate after it loads
+    pendingNavigation = { line, col };
+    await openFile(filePath);
+    // Dispatch after a tick to let the editor update
+    setTimeout(() => {
+      if (pendingNavigation) {
+        window.dispatchEvent(new CustomEvent("pygsc-navigate", { detail: pendingNavigation }));
+        pendingNavigation = null;
+      }
+    }, 50);
   }
 
   return (
@@ -390,6 +584,15 @@ function App() {
         onCopyPath={copyPath}
         onRefresh={refreshProject}
         onOpenApiReference={openApiReference}
+        onAddCustomApi={addCustomApi}
+        onDeleteCustomApi={deleteCustomApi}
+        onAddCustomUsing={addCustomUsing}
+        onDeleteCustomUsing={deleteCustomUsing}
+        initialPanelWidth={sidebarWidth()}
+        onPanelWidthChange={(w) => { setSidebarWidth(w); persistConfig({ sidebar_width: w }); }}
+        initialExpandedDirs={expandedDirs()}
+        onExpandedDirsChange={(dirs) => { setExpandedDirs(dirs); persistConfig({ expanded_dirs: dirs }); }}
+        fileErrors={fileErrors()}
       />
       <main class="content">
         <Editor
@@ -399,9 +602,12 @@ function App() {
           onSwitchTab={switchTab}
           onCloseTab={closeTab}
           onSaveFile={saveCurrentFile}
+          onNavigateToFile={navigateToFile}
           code={activeCode()}
           output={activeOutput()}
           lineMap={activeLineMap()}
+          initialSplitPercent={editorSplit()}
+          onSplitPercentChange={(p) => { setEditorSplit(p); persistConfig({ editor_split: p }); }}
         />
       </main>
     </div>

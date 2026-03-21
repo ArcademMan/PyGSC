@@ -304,6 +304,15 @@ body {
   text-overflow: ellipsis;
 }
 
+.file-error-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f44747;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* ── File Icons ── */
 .file-icon {
   width: 16px;
@@ -502,6 +511,92 @@ body {
   font-size: 11px;
   line-height: 1.4;
   padding-bottom: 4px;
+}
+
+/* ── Custom API Form ── */
+.custom-api-form {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.custom-api-form-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.custom-api-tab {
+  flex: 1;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.custom-api-tab.active {
+  background: var(--accent);
+  color: var(--bg-dark);
+  border-color: var(--accent);
+}
+
+.custom-api-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-api-fields input {
+  padding: 4px 6px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  border-radius: 3px;
+  outline: none;
+}
+
+.custom-api-fields input:focus {
+  border-color: var(--accent);
+}
+
+.btn-add-custom {
+  padding: 4px 8px;
+  background: var(--accent);
+  color: var(--bg-dark);
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-add-custom:hover {
+  opacity: 0.9;
+}
+
+.api-item-custom {
+  border-left: 2px solid var(--accent);
+}
+
+.api-item-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.api-item:hover .api-item-delete {
+  opacity: 1;
+}
+
+.api-item-delete:hover {
+  color: #e06c75;
 }
 
 /* ── Themes Panel ── */
@@ -779,6 +874,75 @@ body {
 .synced-line-highlight {
   background: rgba(102, 192, 244, 0.08);
   border-left: 2px solid var(--accent);
+}
+
+/* ── CodeLens (usages) ── */
+.monaco-editor .codelens-decoration > span,
+.monaco-editor .codelens-decoration a {
+  color: rgba(143, 152, 160, 0.55) !important;
+  font-size: 11px !important;
+  font-style: italic;
+}
+.monaco-editor .codelens-decoration a:hover {
+  color: rgba(102, 192, 244, 0.85) !important;
+  text-decoration: none !important;
+}
+
+/* ── Usages Popup ── */
+.usages-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+.usages-popup {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  min-width: 320px;
+  max-width: 560px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.usages-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-style: italic;
+}
+.usages-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.1s;
+}
+.usages-item:hover {
+  background: rgba(102, 192, 244, 0.1);
+}
+.usages-file {
+  color: var(--accent);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.usages-line {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.usages-preview {
+  color: var(--text);
+  font-family: "Consolas", monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Scrollbar ── */

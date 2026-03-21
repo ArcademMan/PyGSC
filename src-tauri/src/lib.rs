@@ -15,7 +15,18 @@ pub struct AppConfig {
     theme: String,
     last_project: Option<String>,
     last_file: Option<String>,
+    #[serde(default)]
+    open_tabs: Vec<String>,
+    #[serde(default = "default_sidebar_width")]
+    sidebar_width: f64,
+    #[serde(default = "default_editor_split")]
+    editor_split: f64,
+    #[serde(default)]
+    expanded_dirs: Vec<String>,
 }
+
+fn default_sidebar_width() -> f64 { 260.0 }
+fn default_editor_split() -> f64 { 50.0 }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -23,6 +34,10 @@ impl Default for AppConfig {
             theme: "steam-dark".to_string(),
             last_project: None,
             last_file: None,
+            open_tabs: Vec::new(),
+            sidebar_width: 260.0,
+            editor_split: 50.0,
+            expanded_dirs: Vec::new(),
         }
     }
 }
@@ -40,6 +55,14 @@ fn config_path() -> Result<PathBuf, String> {
     Ok(config_dir()?.join("config.json"))
 }
 
+fn custom_api_path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("custom-api.json"))
+}
+
+fn custom_usings_path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("custom-usings.json"))
+}
+
 #[tauri::command]
 fn load_config() -> Result<AppConfig, String> {
     let path = config_path()?;
@@ -55,6 +78,36 @@ fn save_config(config: AppConfig) -> Result<(), String> {
     let path = config_path()?;
     let content = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_custom_api() -> Result<String, String> {
+    let path = custom_api_path()?;
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_custom_api(data: String) -> Result<(), String> {
+    let path = custom_api_path()?;
+    fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_custom_usings() -> Result<String, String> {
+    let path = custom_usings_path()?;
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_custom_usings(data: String) -> Result<(), String> {
+    let path = custom_usings_path()?;
+    fs::write(&path, data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -173,7 +226,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_directory, read_file, write_file,
             create_file, create_directory, delete_path, rename_path, copy_path,
-            load_config, save_config
+            load_config, save_config,
+            load_custom_api, save_custom_api, load_custom_usings, save_custom_usings
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

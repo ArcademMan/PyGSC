@@ -288,5 +288,8 @@
   "clientfield::": "#using scripts\\shared\\clientfield_shared;",
   "killcam::": "#using scripts\\shared\\killcam_shared;",
   "zm_powerup_free_perk::": "#using scripts\\zm\\_zm_powerup_free_perk;",
-  "j_utility::": "#using scripts\\__jutte\\j_utility;"
+  "j_utility::": "#using scripts\\__jutte\\j_utility;",
+  "j_ai::": "#using scripts\\__jutte\\j_ai;",
+  "j_attackable::": "#using scripts\\__jutte\\attackable\\j_attackable;",
+  "objPoints::": "#using scripts\\shared\\objpoints_shared;"
 }

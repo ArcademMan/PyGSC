@@ -1,17 +1,17 @@
  {
 	"language-constructs": {
-		"def ": {
-			"translation": "function ",
-			"fullAPI": "def <function name>()",
-			"summary": "Python from of 'Function', shorter.",
-			"example": "def myfunction",
+		"def": {
+			"translation": "function",
+			"fullAPI": "def <function name>(params):",
+			"summary": "Python form of 'Function', shorter.",
+			"example": "def myfunction(param1, param2):",
 			"mandatory1": "<function name> name of the function"
         },
 		"autoexec": {
 			"translation": "function autoexec",
-			"fullAPI": "autoexec <function name>()",
-			"summary": "Python from of 'Function autoexec', shorter.",
-			"example": "autoexec myfunction",
+			"fullAPI": "autoexec <function name>(params):",
+			"summary": "Python form of 'Function autoexec', shorter.",
+			"example": "autoexec myfunction():",
 			"mandatory1": "<function name> name of the function"
         },
 		"pass": {
@@ -20,11 +20,47 @@
 			"summary": "Python pass to add placeholders.",
 			"example": "if something\n\tpass"
         },
+		"import": {
+			"translation": "#using",
+			"fullAPI": "import <path>",
+			"summary": "Python-style import, translates to #using in GSC.",
+			"example": "import scripts\\zm\\_zm_score"
+        },
+		"include": {
+			"translation": "#insert",
+			"fullAPI": "include <path>",
+			"summary": "Python-style include, translates to #insert in GSC.",
+			"example": "include scripts\\shared\\shared.gsh"
+        },
+		"fname": {
+			"translation": "#namespace",
+			"fullAPI": "fname <name>",
+			"summary": "Defines the script namespace, translates to #namespace in GSC.",
+			"example": "fname points"
+        },
 		"#": {
 			"translation": "//",
 			"fullAPI": "#",
 			"summary": "Python comment",
 			"example": "#comment"
+        },
+		"animtree": {
+			"translation": "#animtree",
+			"fullAPI": "animtree",
+			"summary": "GSC #animtree directive. Use 'animtree' instead of '#animtree' to avoid comment issues.",
+			"example": "model UseAnimTree(animtree)"
+        },
+		"$define": {
+			"translation": "#define",
+			"fullAPI": "$define <name> <value>",
+			"summary": "Preprocessor #define. Use '$define' in PyGSC instead of '#define'.",
+			"example": "$define SPAWNERS_TO_REMOVE array(\"xur_spawner\")"
+        },
+		"animgeneric": {
+			"translation": "",
+			"fullAPI": "animgeneric",
+			"summary": "Shortcut for #using_animtree( \"generic\" ) directive.",
+			"example": "animgeneric"
         }
     },
 	"logics-operator": {
@@ -84,11 +120,11 @@
 			"summary": "shorter version of thread. i know is not that long but i hate it.",
 			"example": "thr functionname()"
         },
-		"end ": {
-			"translation": "end ",
-			"fullAPI": "end ",
-			"summary": "shorter version of end. i know is not that long but i hate it.",
-			"example": "self end 'death'"
+		"end": {
+			"translation": "endon",
+			"fullAPI": "end(<string>)",
+			"summary": "shorter version of endon.",
+			"example": "self end('death')"
         },
 		"wait_blackscreen": {
 			"translation": "level flag::wait_till( \"initial_blackscreen_passed\" )",
@@ -101,11 +137,46 @@
 			"fullAPI": "wait_any('str1', 'death', 'reload', 'whatever')",
 			"summary": "Wait any string and return it.",
 			"example": "msg = wait_any('str1', 'death', 'reload', 'whatever')"
-        }
+        },
+		"adjazone": {
+			"translation": "zm_zonemgr::add_adjacent_zone",
+			"fullAPI": "adjazone(<zone1>, <zone2>, <flag>)",
+			"summary": "Connect two zones, unlocked when the flag is set.",
+			"example": "adjazone('start_zone', 'z0_zone', 'enter_z0')",
+			"mandatory1": "<zone1> The first zone name.",
+			"mandatory2": "<zone2> The adjacent zone name.",
+			"mandatory3": "<flag> The flag that opens the connection."
+		},
+		"regclientfield": {
+			"translation": "clientfield::register",
+			"fullAPI": "regclientfield(<entity_type>, <field_name>, <version>, <bits>, <type>)",
+			"summary": "Register a clientfield for network sync.",
+			"example": "regclientfield('actor', 'dog_fx', VERSION_SHIP, 1, 'int')",
+			"mandatory1": "<entity_type> Type: 'actor', 'scriptmover', 'toplayer', etc.",
+			"mandatory2": "<field_name> The field name string.",
+			"mandatory3": "<version> Version constant, usually VERSION_SHIP.",
+			"mandatory4": "<bits> Number of bits for the field.",
+			"mandatory5": "<type> Field type: 'int', 'counter', 'float'."
+		},
+		"getdvar": {
+			"translation": "GetDvarString",
+			"fullAPI": "getdvar(<name>)",
+			"summary": "Get a dvar value as string.",
+			"example": "val = getdvar('zombie_dog_animset')",
+			"mandatory1": "<name> The dvar name."
+		},
+		"setdvar": {
+			"translation": "SetDvar",
+			"fullAPI": "setdvar(<name>, <value>)",
+			"summary": "Set a dvar value.",
+			"example": "setdvar('ai_meleeRange', 100)",
+			"mandatory1": "<name> The dvar name.",
+			"mandatory2": "<value> The value to set."
+		}
     },
 	"my-common-misspell": {
-		"waitill ": {
-			"translation": "waittill ",
+		"waitill": {
+			"translation": "waittill",
 			"fullAPI": "<entity> waittill(<string>) ",
 			"summary": "my common mistake for 'waittill'",
 			"example": "struct waitill('something')",
@@ -162,6 +233,54 @@
 			"mandatory1": "<duration> The duration of the fire.",
 			"mandatory2": "<interval> Time in seconds on how often you take fire damage.",
 			"mandatory3": "<damage per interval> Damage inflict every interval."
+		},
+		"forcekillplayer": {
+			"translation": "j_utility::forceKillPlayer",
+			"fullAPI": "forcekillplayer()",
+			"summary": "Kill the player even if in god mode.",
+			"example": "player forcekillplayer"
+		},
+		"inflictdamage": {
+			"translation": "j_utility::inflictDamage",
+			"fullAPI": "inflictdamage(<victim>, <damage>)",
+			"summary": "Deal damage to a victim, accounting for armor.",
+			"example": "self inflictdamage(player, 50)",
+			"mandatory1": "<victim> The entity to damage.",
+			"mandatory2": "<damage> Amount of damage to deal."
+		},
+		"isplayervalid": {
+			"translation": "zm_utility::is_player_valid",
+			"fullAPI": "isplayervalid(<player>)",
+			"summary": "Check if a player is valid (alive, not in laststand, not spectating).",
+			"example": "if isplayervalid(player)",
+			"mandatory1": "<player> The player to validate."
+		},
+		"isinlaststand": {
+			"translation": "laststand::player_is_in_laststand",
+			"fullAPI": "isinlaststand()",
+			"summary": "Check if a player is in last stand.",
+			"example": "if player isinlaststand"
+		},
+		"switchweapon": {
+			"translation": "SwitchToWeaponImmediate",
+			"fullAPI": "switchweapon(<weapon>)",
+			"summary": "Immediately switch the player to a weapon.",
+			"example": "player switchweapon(GetWeapon('smg_mp40'))",
+			"mandatory1": "<weapon> The weapon to switch to."
+		},
+		"takeweapon": {
+			"translation": "TakeWeapon",
+			"fullAPI": "takeweapon(<weapon>)",
+			"summary": "Take a weapon from a player.",
+			"example": "player takeweapon(GetWeapon('smg_mp40'))",
+			"mandatory1": "<weapon> The weapon to remove."
+		},
+		"getweapon": {
+			"translation": "GetWeapon",
+			"fullAPI": "getweapon(<name>)",
+			"summary": "Get a weapon object from its string name.",
+			"example": "w = getweapon('smg_mp40')",
+			"mandatory1": "<name> The weapon name string."
 		}
     },
 	"zombie-related": {
@@ -221,6 +340,23 @@
 			"fullAPI": "randomize(<array>)",
 			"summary": "Return a randomized array.",
 			"example": "array = randomize oldarray"
+		},
+		"arrayinsert": {
+			"translation": "ArrayInsert",
+			"fullAPI": "arrayinsert(<array>, <item>, <index>)",
+			"summary": "Insert an item into an array at a given index.",
+			"example": "arrayinsert(weapons, gun, weapons.size)",
+			"mandatory1": "<array> The array to insert into.",
+			"mandatory2": "<item> The item to insert.",
+			"mandatory3": "<index> The position to insert at."
+		},
+		"isinarray": {
+			"translation": "IsInArray",
+			"fullAPI": "isinarray(<array>, <item>)",
+			"summary": "Check if an item is in an array.",
+			"example": "if isinarray(weapons, gun)",
+			"mandatory1": "<array> The array to search.",
+			"mandatory2": "<item> The item to look for."
 		}
 	},
 	"triggers": {
@@ -232,7 +368,28 @@
 			"mandatory1": "<origin> The place given as entity or vector",
 			"mandatory2": "<text> text hint of the trigger.",
 			"optional1": "Position offset to spawn."
-        }
+        },
+		"sethintstring": {
+			"translation": "SetHintString",
+			"fullAPI": "sethintstring(<text>)",
+			"summary": "Set the hint text on a trigger.",
+			"example": "trigger sethintstring('Press $use to open')",
+			"mandatory1": "<text> The hint text to display."
+		},
+		"setcursorhint": {
+			"translation": "SetCursorHint",
+			"fullAPI": "setcursorhint(<type>)",
+			"summary": "Set the cursor hint icon type on a trigger.",
+			"example": "trigger setcursorhint('HINT_NOICON')",
+			"mandatory1": "<type> Hint type: 'HINT_NOICON', 'HINT_ACTIVATE', etc."
+		},
+		"setteamtrigger": {
+			"translation": "SetTeamForTrigger",
+			"fullAPI": "setteamtrigger(<team>)",
+			"summary": "Set which team can activate a trigger.",
+			"example": "trigger setteamtrigger('allies')",
+			"mandatory1": "<team> The team name: 'allies', 'axis', etc."
+		}
     },
     "models": {
 		"spawnmodel": {
@@ -255,7 +412,43 @@
 			"fullAPI": "floatme()",
 			"summary": "make something float on Z axis",
 			"example": "model floatme"
-        }
+        },
+		"jdeleteme": {
+			"translation": "j_utility::deleteMe",
+			"fullAPI": "jdeleteme([time])",
+			"summary": "Delete an entity after an optional delay.",
+			"example": "model thr jdeleteme(5)",
+			"optional1": "[time] delay in seconds before deleting."
+		},
+		"jrandomspin": {
+			"translation": "j_utility::randomSpinMe",
+			"fullAPI": "jrandomspin()",
+			"summary": "Apply a random spin rotation pattern to an entity.",
+			"example": "model thr jrandomspin"
+		},
+		"enablelinkto": {
+			"translation": "EnableLinkTo",
+			"fullAPI": "enablelinkto()",
+			"summary": "Enable an entity to be linked to another entity.",
+			"example": "model enablelinkto"
+		},
+		"linkto": {
+			"translation": "LinkTo",
+			"fullAPI": "linkto(<entity>, [tag], [offset], [angles_offset])",
+			"summary": "Link this entity to another entity.",
+			"example": "model linkto(vehicle, 'tag_origin')",
+			"mandatory1": "<entity> The entity to link to.",
+			"optional1": "[tag] The bone/tag to link to.",
+			"optional2": "[offset] Position offset vector.",
+			"optional3": "[angles_offset] Angles offset vector."
+		},
+		"getweaponmodel": {
+			"translation": "GetWeaponWorldModel",
+			"fullAPI": "getweaponmodel(<weapon>)",
+			"summary": "Get the world model name of a weapon.",
+			"example": "model_name = getweaponmodel(getweapon('smg_mp40'))",
+			"mandatory1": "<weapon> The weapon object."
+		}
     },
 	"output": {
 		"print": {
@@ -277,8 +470,17 @@
 			"summary": "Return a spawned invisible model with an fx applied to it, with the given duration. Last forever if no duration is provided, or until the returned model has been deleted.",
 			"mandatory1": "<model or struct> An existing model, or struct, or a vector.",
 			"mandatory2": "<fx> string of an FX, must be precached first.",
-			"optional1": "[duration] duration in seconds, if omitted, will last forever or till deleted." 
-        }
+			"optional1": "[duration] duration in seconds, if omitted, will last forever or till deleted."
+        },
+		"playfxontag": {
+			"translation": "PlayFXOnTag",
+			"fullAPI": "playfxontag(<fx>, <entity>, <tag>)",
+			"summary": "Play an FX on a specific tag/bone of an entity.",
+			"example": "playfxontag(level._effect['fire'], model, 'tag_origin')",
+			"mandatory1": "<fx> The FX to play.",
+			"mandatory2": "<entity> The entity to play the FX on.",
+			"mandatory3": "<tag> The bone/tag name."
+		}
     },
 	"callbacks": {
 		"zombie_death_cb": {
@@ -396,6 +598,15 @@
 			"summary": "Stop a looping sound on an entity.",
 			"example": "model stopsound('amb_fire_loop')",
 			"mandatory1": "<sound> The sound alias to stop."
+		},
+		"jplaysoundon": {
+			"translation": "j_utility::playSoundOn",
+			"fullAPI": "jplaysoundon(<alias>, [tag], [ends_on_death])",
+			"summary": "Play a sound on an entity at a specific tag/bone.",
+			"example": "model jplaysoundon('fire_loop', 'tag_origin', true)",
+			"mandatory1": "<alias> The sound alias to play.",
+			"optional1": "[tag] The bone/tag to play the sound on.",
+			"optional2": "[ends_on_death] if true, stop sound when entity dies."
 		}
 	},
 	"math": {
@@ -413,6 +624,310 @@
 			"example": "f = randfloat(0.5, 2.0)",
 			"mandatory1": "<min> The minimum value.",
 			"mandatory2": "<max> The maximum value."
+		}
+	},
+	"zombie-control": {
+		"disablezombiespawn": {
+			"translation": "j_utility::disableZombieSpawn",
+			"fullAPI": "disablezombiespawn",
+			"summary": "Disable round zombie spawners.",
+			"example": "disablezombiespawn"
+		},
+		"enablezombiespawn": {
+			"translation": "j_utility::enableZombieSpawn",
+			"fullAPI": "enablezombiespawn",
+			"summary": "Re-enable round zombie spawners.",
+			"example": "enablezombiespawn"
+		},
+		"forcekillzombie": {
+			"translation": "j_utility::forceKillZombie",
+			"fullAPI": "forcekillzombie([delete])",
+			"summary": "Kill all zombies on the map.",
+			"example": "forcekillzombie(true)",
+			"optional1": "[delete] if true, also delete the corpses."
+		},
+		"respawnzombie": {
+			"translation": "j_utility::respawnZombie",
+			"fullAPI": "respawnzombie()",
+			"summary": "Add the zombie back to the respawn queue.",
+			"example": "zom respawnzombie"
+		},
+		"disabledog": {
+			"translation": "j_utility::disableDog",
+			"fullAPI": "disabledog",
+			"summary": "Prevent dog rounds from happening.",
+			"example": "disabledog"
+		},
+		"setsupersprinter": {
+			"translation": "j_utility::setSuperSprinter",
+			"fullAPI": "setsupersprinter([ais], [justspawned])",
+			"summary": "Set zombie sprint speed override to super sprinter.",
+			"example": "setsupersprinter(zombies, false)",
+			"optional1": "[ais] array of zombies to affect.",
+			"optional2": "[justspawned] if true, apply only to just spawned zombies."
+		},
+		"setwalker": {
+			"translation": "j_utility::setWalker",
+			"fullAPI": "setwalker([ais], [justspawned])",
+			"summary": "Set zombie speed override to walker.",
+			"example": "setwalker(zombies, false)",
+			"optional1": "[ais] array of zombies to affect.",
+			"optional2": "[justspawned] if true, apply only to just spawned zombies."
+		}
+	},
+	"ai": {
+		"spawnai": {
+			"translation": "j_utility::spawnAi",
+			"fullAPI": "spawnai(<position>, [ally], [failsafe], [disable_search], [invulnerable], [targetname], [actor])",
+			"summary": "Spawn an AI/NPC at a position with various options.",
+			"example": "ai = spawnai(struct.origin, true, true)",
+			"mandatory1": "<position> The spawn position as vector.",
+			"optional1": "[ally] if true, AI is friendly.",
+			"optional2": "[failsafe] if true, enable failsafe teleport.",
+			"optional3": "[disable_search] if true, AI won't search for targets.",
+			"optional4": "[invulnerable] if true, AI can't be damaged.",
+			"optional5": "[targetname] custom targetname for the AI.",
+			"optional6": "[actor] specific actor archetype to spawn."
+		},
+		"aisetgoal": {
+			"translation": "j_ai::aiSetGoal",
+			"fullAPI": "aisetgoal(<goal>)",
+			"summary": "Set the AI destination to move to.",
+			"example": "ai thr aisetgoal(destination.origin)",
+			"mandatory1": "<goal> The destination origin or entity."
+		},
+		"aistartfollow": {
+			"translation": "j_ai::aiStartFollow",
+			"fullAPI": "aistartfollow(<player>, [speedup])",
+			"summary": "Make the AI follow a player.",
+			"example": "ai thr aistartfollow(player, true)",
+			"mandatory1": "<player> The player to follow.",
+			"optional1": "[speedup] if true, AI speeds up to catch up."
+		},
+		"aistopfollow": {
+			"translation": "j_ai::aiStopFollow",
+			"fullAPI": "aistopfollow()",
+			"summary": "Stop the AI from following.",
+			"example": "ai thr aistopfollow"
+		},
+		"aisetfake": {
+			"translation": "j_ai::aiSetFake",
+			"fullAPI": "aisetfake(<model>, [speed], [offset], [pushable])",
+			"summary": "Replace the AI visual with a custom model while keeping AI logic.",
+			"example": "ai thr aisetfake('my_model', 1.0, (0,0,0), true)",
+			"mandatory1": "<model> The visual model name.",
+			"optional1": "[speed] movement speed multiplier.",
+			"optional2": "[offset] position offset vector.",
+			"optional3": "[pushable] if true, players can push the fake model."
+		},
+		"aisetfakeanim": {
+			"translation": "j_ai::aiSetFakeAnim",
+			"fullAPI": "aisetfakeanim(<walk>, <idle>, <attack>, <death>)",
+			"summary": "Set custom animations for a fake AI model.",
+			"example": "ai thr aisetfakeanim('walk_anim', 'idle_anim', 'attack_anim', 'death_anim')",
+			"mandatory1": "<walk> walk animation name.",
+			"mandatory2": "<idle> idle animation name.",
+			"mandatory3": "<attack> attack animation name.",
+			"mandatory4": "<death> death animation name."
+		}
+	},
+	"area-queries": {
+		"getnearestzombie": {
+			"translation": "j_utility::getNearestZombie",
+			"fullAPI": "getnearestzombie(<point>, [distance])",
+			"summary": "Get the single closest zombie to a point.",
+			"example": "zom = getnearestzombie(self.origin, 1000)",
+			"mandatory1": "<point> The origin point to search from.",
+			"optional1": "[distance] max search distance."
+		},
+		"getzombiearound": {
+			"translation": "j_utility::getZombieAround",
+			"fullAPI": "getzombiearound(<origin>, [distance], [excluders], [mindist])",
+			"summary": "Get an array of zombies sorted by distance from a point.",
+			"example": "zombies = getzombiearound(self.origin, 500)",
+			"mandatory1": "<origin> The origin point to search from.",
+			"optional1": "[distance] max search distance.",
+			"optional2": "[excluders] array of zombies to exclude.",
+			"optional3": "[mindist] minimum distance."
+		},
+		"getplayersaround": {
+			"translation": "j_utility::getPlayersAround",
+			"fullAPI": "getplayersaround(<origin>, [distance], [excluders], [mindist])",
+			"summary": "Get an array of players sorted by distance from a point.",
+			"example": "nearby = getplayersaround(self.origin, 300)",
+			"mandatory1": "<origin> The origin point to search from.",
+			"optional1": "[distance] max search distance.",
+			"optional2": "[excluders] array of players to exclude.",
+			"optional3": "[mindist] minimum distance."
+		},
+		"getentaround": {
+			"translation": "j_utility::getEntAround",
+			"fullAPI": "getentaround(<name>, <origin>, [distance], [excluders], [mindist])",
+			"summary": "Get entities by targetname sorted by distance.",
+			"example": "ents = getentaround('barricade', self.origin, 500)",
+			"mandatory1": "<name> The targetname to search for.",
+			"mandatory2": "<origin> The origin point to search from.",
+			"optional1": "[distance] max search distance.",
+			"optional2": "[excluders] array of entities to exclude.",
+			"optional3": "[mindist] minimum distance."
+		},
+		"getstructaround": {
+			"translation": "j_utility::getStructAround",
+			"fullAPI": "getstructaround(<name>, <origin>, [distance], [excluders], [mindist], [type])",
+			"summary": "Get structs by targetname sorted by distance.",
+			"example": "structs = getstructaround('spawn_point', self.origin, 1000)",
+			"mandatory1": "<name> The targetname to search for.",
+			"mandatory2": "<origin> The origin point to search from.",
+			"optional1": "[distance] max search distance.",
+			"optional2": "[excluders] array of structs to exclude.",
+			"optional3": "[mindist] minimum distance.",
+			"optional4": "[type] struct type filter."
+		},
+		"getzombiesinarea": {
+			"translation": "j_utility::getZombiesInArea",
+			"fullAPI": "getzombiesinarea(<zone>, [zone2])",
+			"summary": "Get zombies touching a trigger zone.",
+			"example": "zoms = getzombiesinarea(trigger)",
+			"mandatory1": "<zone> The trigger to check.",
+			"optional1": "[zone2] optional second trigger to also check."
+		},
+		"getplayersinarea": {
+			"translation": "j_utility::getPlayersInArea",
+			"fullAPI": "getplayersinarea(<zone>)",
+			"summary": "Get players touching a trigger zone.",
+			"example": "players = getplayersinarea(trigger)",
+			"mandatory1": "<zone> The trigger to check."
+		},
+		"isplayerinarea": {
+			"translation": "j_utility::isPlayerInArea",
+			"fullAPI": "isplayerinarea(<zone>)",
+			"summary": "Check if self (player) is inside a trigger zone.",
+			"example": "if self isplayerinarea(trigger)",
+			"mandatory1": "<zone> The trigger to check."
+		}
+	},
+	"hud": {
+		"createtexthud": {
+			"translation": "j_utility::createTextHuD",
+			"fullAPI": "createtexthud(<text>, [fontscale], [alignX], [alignY], [horzAlign], [vertAlign], [global], [color])",
+			"summary": "Create a text HUD element on screen.",
+			"example": "hud = createtexthud('Hello World', 2, 'center', 'middle')",
+			"mandatory1": "<text> The text to display.",
+			"optional1": "[fontscale] font size, default 1.",
+			"optional2": "[alignX] horizontal align.",
+			"optional3": "[alignY] vertical align.",
+			"optional4": "[horzAlign] horizontal alignment mode.",
+			"optional5": "[vertAlign] vertical alignment mode.",
+			"optional6": "[global] if true, visible to all players.",
+			"optional7": "[color] RGB color tuple."
+		},
+		"createshaderhud": {
+			"translation": "j_utility::createShaderHuD",
+			"fullAPI": "createshaderhud(<shader>, [alignY], [alignX], [height], [width])",
+			"summary": "Create an image/shader HUD element.",
+			"example": "hud = createshaderhud('white', 'middle', 'center', 50, 200)",
+			"mandatory1": "<shader> The shader/image name.",
+			"optional1": "[alignY] vertical align.",
+			"optional2": "[alignX] horizontal align.",
+			"optional3": "[height] height in pixels.",
+			"optional4": "[width] width in pixels."
+		},
+		"destroyhud": {
+			"translation": "j_utility::destroyTextHuD",
+			"fullAPI": "destroyhud(<element>, [timer])",
+			"summary": "Fade out and destroy a HUD element.",
+			"example": "destroyhud(hud, 1.5)",
+			"mandatory1": "<element> The HUD element to destroy.",
+			"optional1": "[timer] fade out duration in seconds."
+		},
+		"setwaypoint": {
+			"translation": "objPoints::create",
+			"fullAPI": "setwaypoint(<name>, <origin>, <team>, <icon>)",
+			"summary": "Create a waypoint/objective marker on screen.",
+			"example": "wp = setwaypoint('obj_marker', struct.origin + (0,0,85), 'all', 'waypoint_icon')",
+			"mandatory1": "<name> Unique name for the waypoint.",
+			"mandatory2": "<origin> The world position.",
+			"mandatory3": "<team> 'all', 'allies', or 'axis'.",
+			"mandatory4": "<icon> The icon shader to display."
+		},
+		"luinotify": {
+			"translation": "LUINotifyEvent",
+			"fullAPI": "luinotify(<event>, <param_count>, ...params)",
+			"summary": "Send a LUI notification event to the client UI.",
+			"example": "player luinotify(&'workbench', 3, 1, idx, level.unlocked)",
+			"mandatory1": "<event> The event name reference.",
+			"mandatory2": "<param_count> Number of parameters following.",
+			"mandatory3": "...params The parameter values."
+		}
+	},
+	"vectors": {
+		"randorigin": {
+			"translation": "j_utility::getRandomOriginFromPoint",
+			"fullAPI": "randorigin(<point>, [z_offset], [mindist], [maxdist], [search_radius], [out_of_boundries])",
+			"summary": "Get a random navmesh position from a point.",
+			"example": "pos = randorigin(self.origin, 0, 50, 300)",
+			"mandatory1": "<point> The center origin.",
+			"optional1": "[z_offset] height offset.",
+			"optional2": "[mindist] minimum distance from point.",
+			"optional3": "[maxdist] maximum distance from point.",
+			"optional4": "[search_radius] navmesh search radius.",
+			"optional5": "[out_of_boundries] allow out of bounds results."
+		},
+		"pointfromangle": {
+			"translation": "j_utility::getPointFromDistanceAndAngles",
+			"fullAPI": "pointfromangle(<origin>, <angle>, <distance>, [use_z])",
+			"summary": "Calculate a point given an origin, angle and distance.",
+			"example": "pos = pointfromangle(self.origin, self.angles, 200)",
+			"mandatory1": "<origin> The starting origin.",
+			"mandatory2": "<angle> The direction angle.",
+			"mandatory3": "<distance> The distance from origin.",
+			"optional1": "[use_z] if true, use Z axis too."
+		},
+		"traceeye": {
+			"translation": "j_utility::getTraceFromEye",
+			"fullAPI": "traceeye([scale], [hitchar], [offset])",
+			"summary": "Raycast from player's eye/view direction. Called on player.",
+			"example": "hit = self traceeye(1, true)",
+			"optional1": "[scale] trace distance scale.",
+			"optional2": "[hitchar] if true, trace hits characters.",
+			"optional3": "[offset] eye position offset."
+		},
+		"canseeme": {
+			"translation": "j_utility::canPlayerSeeMe",
+			"fullAPI": "canseeme(<player>)",
+			"summary": "Check if a player can see this entity.",
+			"example": "if model canseeme(player)",
+			"mandatory1": "<player> The player to check line of sight from."
+		},
+		"navmeshpoint": {
+			"translation": "GetClosestPointOnNavMesh",
+			"fullAPI": "navmeshpoint(<origin>, [radius], [boundary])",
+			"summary": "Get the closest valid point on the navmesh.",
+			"example": "point = navmeshpoint(self.origin, 250, 15)",
+			"mandatory1": "<origin> The origin to search from.",
+			"optional1": "[radius] Search radius.",
+			"optional2": "[boundary] Boundary distance."
+		}
+	},
+	"attackable": {
+		"makeattackable": {
+			"translation": "j_attackable::makeAttackable",
+			"fullAPI": "makeattackable(<name>, <hp>, [team], [priority], [attack_spots])",
+			"summary": "Make a model attackable by zombies with HP and attack slots.",
+			"example": "model thr makeattackable('tower_1', 5000, 'noteam', 3, 10)",
+			"mandatory1": "<name> Unique name for the attackable.",
+			"mandatory2": "<hp> Hit points of the object.",
+			"optional1": "[team] Team name, default 'noteam'.",
+			"optional2": "[priority] 0-5, higher = less priority for zombies.",
+			"optional3": "[attack_spots] Number of zombie attack positions around the object."
+		},
+		"searchattackable": {
+			"translation": "j_attackable::searchAttackable",
+			"fullAPI": "searchattackable(<team>, [attackable])",
+			"summary": "Flag zombies to start attacking attackable objects.",
+			"example": "zombies thr searchattackable('noteam')",
+			"mandatory1": "<team> The team of attackables to target.",
+			"optional1": "[attackable] specific attackable to target."
 		}
 	}
 }
