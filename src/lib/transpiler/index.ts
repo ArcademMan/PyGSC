@@ -4,7 +4,7 @@ export { expandSyntaxSugar, collapseSyntaxSugar, collectIndentedBody } from "./s
 export { transpile, transpileWithMap } from "./forward";
 export { reverseTranspile } from "./reverse";
 export { lint } from "./lint";
-export { lintGsc } from "./lint-gsc";
+export { lintGsc, indexGshDefines } from "./lint-gsc";
 export {
   getApiData,
   getApiKeywords,

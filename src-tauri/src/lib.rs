@@ -23,10 +23,13 @@ pub struct AppConfig {
     editor_split: f64,
     #[serde(default)]
     expanded_dirs: Vec<String>,
+    #[serde(default = "default_pygsc_enabled")]
+    pygsc_enabled: bool,
 }
 
 fn default_sidebar_width() -> f64 { 260.0 }
 fn default_editor_split() -> f64 { 50.0 }
+fn default_pygsc_enabled() -> bool { true }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -38,6 +41,7 @@ impl Default for AppConfig {
             sidebar_width: 260.0,
             editor_split: 50.0,
             expanded_dirs: Vec::new(),
+            pygsc_enabled: true,
         }
     }
 }

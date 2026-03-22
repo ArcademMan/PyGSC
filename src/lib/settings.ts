@@ -8,6 +8,7 @@ export interface AppConfig {
   sidebar_width: number;
   editor_split: number;
   expanded_dirs: string[];
+  pygsc_enabled: boolean;
 }
 
 export async function loadConfig(): Promise<AppConfig> {

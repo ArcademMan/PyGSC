@@ -7,12 +7,8 @@ export function getGscTokensProvider(bo3Names: string[]): monaco.languages.IMona
       root: [
         [/\/\*/, { token: "comment", next: "@blockComment" }],
         [/\/\/.*$/, "comment"],
-        [/#using\b.*$/, "keyword.using"],
-        [/#precache\b.*$/, "keyword.using"],
-        [/#define\b/, "keyword.using"],
-        [/#namespace\b/, "keyword.using"],
-        [/#using_animtree\b.*$/, "keyword.using"],
-        [/REGISTER_SYSTEM_EX\b/, "keyword.using"],
+        [/#(?:using|precache|insert|define|namespace|using_animtree)\b/, "keyword.directive"],
+        [/REGISTER_SYSTEM_EX\b/, "keyword.directive"],
         [/"[^"]*"/, "string"],
         [/'[^']*'/, "string"],
         [/\b\d+\.\d+\b/, "number.float"],
@@ -59,6 +55,7 @@ export function getGscTokensProvider(bo3Names: string[]): monaco.languages.IMona
         [/[a-zA-Z_]\w*/, { token: "identifier", next: "@pop" }],
       ],
       funcName: [
+        [/autoexec/, { token: "keyword", next: "@funcName" }],
         [/[a-zA-Z_]\w*/, { token: "function.declaration", next: "@pop" }],
         [/\s+/, ""],
         [/./, { token: "", next: "@pop" }],

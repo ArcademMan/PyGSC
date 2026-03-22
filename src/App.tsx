@@ -1,12 +1,15 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint, lintGsc } from "./lib/transpiler";
+import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint, lintGsc, indexGshDefines } from "./lib/transpiler";
 import { parseFile, invalidateApiNames } from "./lib/language-service";
 import { loadConfig, saveConfig, loadCustomApi, saveCustomApi, loadCustomUsings, saveCustomUsings, type AppConfig } from "./lib/settings";
 import { applyTheme, getPresetById, PRESET_THEMES } from "./lib/themes";
 import Sidebar from "./components/Sidebar";
 import Editor from "./components/Editor";
+import StatusBar from "./components/StatusBar";
+import Toast, { showToast } from "./components/Toast";
+import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import "./App.css";
 
 export interface FileEntry {
@@ -49,6 +52,22 @@ function collectScriptPaths(entries: FileEntry[]): string[] {
   return paths;
 }
 
+/** Collect all .gsh header file paths from a file tree */
+function collectGshPaths(entries: FileEntry[]): string[] {
+  const paths: string[] = [];
+  function walk(items: FileEntry[]) {
+    for (const e of items) {
+      if (e.is_dir) {
+        if (e.children) walk(e.children);
+      } else if (e.name.endsWith(".gsh")) {
+        paths.push(e.path);
+      }
+    }
+  }
+  walk(entries);
+  return paths;
+}
+
 function App() {
   const [tabs, setTabs] = createSignal<OpenTab[]>([]);
   const [activeTabPath, setActiveTabPath] = createSignal<string | null>(null);
@@ -59,41 +78,69 @@ function App() {
   const [editorSplit, setEditorSplit] = createSignal(50);
   const [expandedDirs, setExpandedDirs] = createSignal<string[]>([]);
   const [fileErrors, setFileErrors] = createSignal<Record<string, number>>({});
+  const [pygscEnabled, setPygscEnabled] = createSignal(true);
+  const [fileWarnings, setFileWarnings] = createSignal<Record<string, number>>({});
+  const [cursorLine, setCursorLine] = createSignal(1);
+  const [cursorColumn, setCursorColumn] = createSignal(1);
+  const [showShortcuts, setShowShortcuts] = createSignal(false);
   let suppressUnsaved = false;
   let configLoaded = false;
+  let ctrlKPressed = false;
 
   /** Read and parse all script files in the project for IntelliSense */
   async function indexProjectFiles(entries: FileEntry[]) {
+    // Index .gsh header files for #define macros
+    const gshPaths = collectGshPaths(entries);
+    if (gshPaths.length > 0) {
+      const gshResults = await Promise.allSettled(
+        gshPaths.map((p) => invoke<string>("read_file", { path: p }))
+      );
+      const gshContents = gshResults
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+        .map((r) => r.value);
+      indexGshDefines(gshContents);
+    } else {
+      indexGshDefines([]);
+    }
+
     const paths = collectScriptPaths(entries);
     const errorMap: Record<string, number> = {};
+    const isPygsc = pygscEnabled();
     // Read files in parallel, parse each for language service + lint
     const results = await Promise.allSettled(
       paths.map(async (p) => {
         const content = await invoke<string>("read_file", { path: p });
-        // For GSC/CSC files, reverse-transpile to PyGSC so line numbers match the editor
         let code = content;
-        if (isGscFile(p)) {
-          try {
-            code = reverseTranspile(content);
-          } catch { /* use raw content as fallback */ }
-        }
-        parseFile(fileUri(p), code);
-        // Lint all project files (PyGSC + GSC)
-        const diagnostics = lint(code);
-        let errorCount = diagnostics.filter(d => d.severity === "error").length;
-        // For GSC/CSC files, lint the original content directly (not round-tripped)
-        // to stay consistent with openFile and avoid false positives from
-        // reverse→forward transpile discrepancies.
-        if (isGscFile(p)) {
-          const gscDiags = lintGsc(content);
-          errorCount += gscDiags.filter(d => d.severity === "error").length;
-        } else {
-          try {
-            const result = transpileWithMap(code);
-            const gscDiags = lintGsc(result.code);
+        let errorCount: number;
+
+        if (isPygsc) {
+          // For GSC/CSC files, reverse-transpile to PyGSC so line numbers match the editor
+          if (isGscFile(p)) {
+            try {
+              code = reverseTranspile(content);
+            } catch { /* use raw content as fallback */ }
+          }
+          parseFile(fileUri(p), code);
+          // Lint all project files (PyGSC + GSC)
+          const diagnostics = lint(code);
+          errorCount = diagnostics.filter(d => d.severity === "error").length;
+          if (isGscFile(p)) {
+            const gscDiags = lintGsc(content);
             errorCount += gscDiags.filter(d => d.severity === "error").length;
-          } catch { /* transpile error, already counted */ }
+          } else {
+            try {
+              const result = transpileWithMap(code);
+              const gscDiags = lintGsc(result.code);
+              errorCount += gscDiags.filter(d => d.severity === "error").length;
+            } catch { /* transpile error, already counted */ }
+          }
+        } else {
+          // GSC-only mode: parse raw content, lint GSC only
+          parseFile(fileUri(p), content);
+          const gscDiags = lintGsc(content);
+          errorCount = gscDiags.filter(d => d.severity === "error").length;
         }
+
         if (errorCount > 0) errorMap[p] = errorCount;
       })
     );
@@ -132,6 +179,7 @@ function App() {
       sidebar_width: sidebarWidth(),
       editor_split: editorSplit(),
       expanded_dirs: expandedDirs(),
+      pygsc_enabled: pygscEnabled(),
       ...partial,
     };
     try {
@@ -144,8 +192,22 @@ function App() {
   // Keyboard shortcuts
   function handleKeyDown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if (ctrlKPressed) {
+        e.preventDefault();
+        ctrlKPressed = false;
+        setShowShortcuts(true);
+        return;
+      }
       e.preventDefault();
       saveCurrentFile();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      ctrlKPressed = true;
+      setTimeout(() => { ctrlKPressed = false; }, 1000);
+      return;
+    }
+    if (e.key !== "Control" && e.key !== "Meta") {
+      ctrlKPressed = false;
     }
   }
 
@@ -178,6 +240,7 @@ function App() {
         applyTheme(preset.colors);
         setActiveTheme(preset.id);
       }
+      setPygscEnabled(config.pygsc_enabled ?? true);
       if (config.sidebar_width) setSidebarWidth(config.sidebar_width);
       if (config.editor_split) setEditorSplit(config.editor_split);
       if (config.expanded_dirs?.length) setExpandedDirs(config.expanded_dirs);
@@ -216,23 +279,43 @@ function App() {
     }
     let output: string;
     let lineMap: number[] | undefined;
-    try {
-      const result = transpileWithMap(newCode);
-      output = result.code;
-      lineMap = result.lineMap;
-    } catch {
-      output = "// Transpile error";
-    }
-    updateTab(path, { code: newCode, output, unsaved: true, lineMap });
+    let errorCount: number;
+    let warningCount: number;
 
-    // Run lint and track error count for this file (PyGSC + GSC)
-    const diagnostics = lint(newCode);
-    let errorCount = diagnostics.filter(d => d.severity === "error").length;
-    if (output && output !== "// Transpile error") {
-      const gscDiags = lintGsc(output);
-      errorCount += gscDiags.filter(d => d.severity === "error").length;
+    if (pygscEnabled()) {
+      try {
+        const result = transpileWithMap(newCode);
+        output = result.code;
+        lineMap = result.lineMap;
+      } catch {
+        output = "// Transpile error";
+      }
+      // Run lint (PyGSC + GSC)
+      const diagnostics = lint(newCode);
+      errorCount = diagnostics.filter(d => d.severity === "error").length;
+      warningCount = diagnostics.filter(d => d.severity === "warning").length;
+      if (output && output !== "// Transpile error") {
+        const gscDiags = lintGsc(output);
+        errorCount += gscDiags.filter(d => d.severity === "error").length;
+        warningCount += gscDiags.filter(d => d.severity === "warning").length;
+      }
+    } else {
+      output = "";
+      lineMap = undefined;
+      // GSC-only lint
+      const gscDiags = lintGsc(newCode);
+      errorCount = gscDiags.filter(d => d.severity === "error").length;
+      warningCount = gscDiags.filter(d => d.severity === "warning").length;
     }
+
+    updateTab(path, { code: newCode, output, unsaved: true, lineMap });
     setFileErrors((prev) => ({ ...prev, [path]: errorCount }));
+    setFileWarnings((prev) => ({ ...prev, [path]: warningCount }));
+  }
+
+  function handleCursorChange(line: number, column: number) {
+    setCursorLine(line);
+    setCursorColumn(column);
   }
 
   // Project operations
@@ -277,30 +360,45 @@ function App() {
       const content = await invoke<string>("read_file", { path: filePath });
       let code: string;
       let output: string;
-
       let lineMap: number[] | undefined;
-      if (isGscFile(filePath)) {
-        try {
-          code = reverseTranspile(content);
-          output = content;
-          // Build line map from the reverse-transpiled code
+      let errorCount: number;
+
+      if (pygscEnabled()) {
+        if (isGscFile(filePath)) {
           try {
-            const result = transpileWithMap(code);
-            lineMap = result.lineMap;
-          } catch { /* ignore */ }
-        } catch {
+            code = reverseTranspile(content);
+            output = content;
+            try {
+              const result = transpileWithMap(code);
+              lineMap = result.lineMap;
+            } catch { /* ignore */ }
+          } catch {
+            code = content;
+            output = "// Reverse transpile error";
+          }
+        } else {
           code = content;
-          output = "// Reverse transpile error";
+          try {
+            const result = transpileWithMap(content);
+            output = result.code;
+            lineMap = result.lineMap;
+          } catch {
+            output = "// Transpile error";
+          }
+        }
+        const diagnostics = lint(code);
+        errorCount = diagnostics.filter(d => d.severity === "error").length;
+        if (output && output !== "// Transpile error" && output !== "// Reverse transpile error") {
+          const gscDiags = lintGsc(output);
+          errorCount += gscDiags.filter(d => d.severity === "error").length;
         }
       } else {
+        // GSC-only mode: load raw content, no transpilation
         code = content;
-        try {
-          const result = transpileWithMap(content);
-          output = result.code;
-          lineMap = result.lineMap;
-        } catch {
-          output = "// Transpile error";
-        }
+        output = "";
+        lineMap = undefined;
+        const gscDiags = lintGsc(content);
+        errorCount = gscDiags.filter(d => d.severity === "error").length;
       }
 
       const newTab: OpenTab = {
@@ -316,13 +414,7 @@ function App() {
       setTabs((prev) => [...prev, newTab]);
       setActiveTabPath(filePath);
 
-      // Lint the opened file (PyGSC + GSC)
-      const diagnostics = lint(code);
-      let errorCount = diagnostics.filter(d => d.severity === "error").length;
-      if (output && output !== "// Transpile error" && output !== "// Reverse transpile error") {
-        const gscDiags = lintGsc(output);
-        errorCount += gscDiags.filter(d => d.severity === "error").length;
-      }
+      parseFile(fileUri(filePath), code);
       setFileErrors((prev) => ({ ...prev, [filePath]: errorCount }));
       if (persist) persistConfig({ last_file: filePath });
     } catch (e) {
@@ -334,14 +426,18 @@ function App() {
     const tab = getActiveTab();
     if (!tab) return;
     try {
-      if (isGscFile(tab.path)) {
+      if (pygscEnabled() && isGscFile(tab.path)) {
+        // PyGSC mode: save transpiled output for .gsc/.csc files
         await invoke("write_file", { path: tab.path, content: tab.output });
       } else {
+        // GSC-only mode or .pygsc file: save code directly
         await invoke("write_file", { path: tab.path, content: tab.code });
       }
       updateTab(tab.path, { unsaved: false });
+      showToast(`Saved ${tab.name}`, "success");
     } catch (e) {
       console.error("Failed to save file:", e);
+      showToast(`Failed to save: ${e}`, "error");
     }
   }
 
@@ -352,8 +448,10 @@ function App() {
     try {
       await invoke("write_file", { path: gscPath, content: tab.output });
       await refreshProject();
+      showToast("GSC output saved", "success");
     } catch (e) {
       console.error("Failed to save GSC:", e);
+      showToast(`Failed to save GSC: ${e}`, "error");
     }
   }
 
@@ -422,6 +520,7 @@ function App() {
       await invoke("create_file", { path });
       await refreshProject();
       await openFile(path);
+      showToast(`Created ${fileNameFromPath(path)}`, "success");
     } catch (e) {
       console.error("Failed to create file:", e);
     }
@@ -448,6 +547,7 @@ function App() {
         }
       }
       await refreshProject();
+      showToast("Deleted successfully", "info");
     } catch (e) {
       console.error("Failed to delete:", e);
     }
@@ -471,6 +571,7 @@ function App() {
         }
       }
       await refreshProject();
+      showToast("Renamed successfully", "info");
     } catch (e) {
       console.error("Failed to rename:", e);
     }
@@ -482,6 +583,86 @@ function App() {
       await refreshProject();
     } catch (e) {
       console.error("Failed to copy:", e);
+    }
+  }
+
+  async function handleTogglePygsc(enabled: boolean) {
+    // Check for unsaved changes
+    const unsavedTabs = tabs().filter(t => t.unsaved && t.type !== "api-reference");
+    if (unsavedTabs.length > 0) {
+      const confirmed = await ask(
+        `${unsavedTabs.length} file(s) have unsaved changes. Switching mode will reload all files from disk. Continue?`,
+        { title: "Unsaved Changes", kind: "warning" }
+      );
+      if (!confirmed) return;
+    }
+
+    setPygscEnabled(enabled);
+    persistConfig({ pygsc_enabled: enabled });
+
+    // Close .pygsc tabs when switching to GSC-only mode
+    if (!enabled) {
+      const pygscTabs = tabs().filter(t => t.path.toLowerCase().endsWith(".pygsc"));
+      if (pygscTabs.length > 0) {
+        setTabs(prev => prev.filter(t => !t.path.toLowerCase().endsWith(".pygsc")));
+        if (activeTabPath() && pygscTabs.some(t => t.path === activeTabPath())) {
+          const remaining = tabs().filter(t => !t.path.toLowerCase().endsWith(".pygsc"));
+          setActiveTabPath(remaining.length > 0 ? remaining[0].path : null);
+        }
+      }
+    }
+
+    // Re-process all remaining open file tabs
+    const currentTabs = tabs().filter(t => t.type !== "api-reference");
+    for (const tab of currentTabs) {
+      try {
+        const content = await invoke<string>("read_file", { path: tab.path });
+        let code: string;
+        let output: string;
+        let lineMap: number[] | undefined;
+
+        if (enabled) {
+          if (isGscFile(tab.path)) {
+            try {
+              code = reverseTranspile(content);
+              output = content;
+              try {
+                const result = transpileWithMap(code);
+                lineMap = result.lineMap;
+              } catch { /* ignore */ }
+            } catch {
+              code = content;
+              output = "// Reverse transpile error";
+            }
+          } else {
+            code = content;
+            try {
+              const result = transpileWithMap(content);
+              output = result.code;
+              lineMap = result.lineMap;
+            } catch {
+              output = "// Transpile error";
+            }
+          }
+        } else {
+          code = content;
+          output = "";
+          lineMap = undefined;
+        }
+
+        suppressUnsaved = true;
+        updateTab(tab.path, { code, output, lineMap, unsaved: false });
+        parseFile(fileUri(tab.path), code);
+      } catch (e) {
+        console.error(`Failed to reload ${tab.path}:`, e);
+      }
+    }
+
+    // Re-index project
+    const tree = fileTree();
+    if (tree.length > 0) {
+      setFileErrors({});
+      indexProjectFiles(tree);
     }
   }
 
@@ -567,6 +748,24 @@ function App() {
     return getActiveTab()?.lineMap;
   }
 
+  function activeErrors(): number {
+    const tab = getActiveTab();
+    if (!tab || tab.type === "api-reference") return 0;
+    return fileErrors()[tab.path] ?? 0;
+  }
+
+  function activeWarnings(): number {
+    const tab = getActiveTab();
+    if (!tab || tab.type === "api-reference") return 0;
+    return fileWarnings()[tab.path] ?? 0;
+  }
+
+  function activeFileName(): string | null {
+    const tab = getActiveTab();
+    if (!tab || tab.type === "api-reference") return null;
+    return tab.name;
+  }
+
   /** Navigate to a specific file, line, and column (used by IntelliSense) */
   let pendingNavigation: { line: number; col: number } | null = null;
 
@@ -617,6 +816,8 @@ function App() {
         initialExpandedDirs={expandedDirs()}
         onExpandedDirsChange={(dirs) => { setExpandedDirs(dirs); persistConfig({ expanded_dirs: dirs }); }}
         fileErrors={fileErrors()}
+        pygscEnabled={pygscEnabled()}
+        onTogglePygsc={handleTogglePygsc}
       />
       <main class="content">
         <Editor
@@ -632,8 +833,21 @@ function App() {
           lineMap={activeLineMap()}
           initialSplitPercent={editorSplit()}
           onSplitPercentChange={(p) => { setEditorSplit(p); persistConfig({ editor_split: p }); }}
+          pygscEnabled={pygscEnabled()}
+          onCursorChange={handleCursorChange}
+          projectPath={projectPath()}
+        />
+        <StatusBar
+          language={pygscEnabled() ? "PyGSC" : "GSC"}
+          fileName={activeFileName()}
+          line={cursorLine()}
+          column={cursorColumn()}
+          errors={activeErrors()}
+          warnings={activeWarnings()}
         />
       </main>
+      <Toast />
+      <KeyboardShortcuts show={showShortcuts()} onClose={() => setShowShortcuts(false)} />
     </div>
   );
 }

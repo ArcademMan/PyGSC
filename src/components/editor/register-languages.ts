@@ -50,12 +50,12 @@ export function registerLanguages() {
   monaco.languages.setLanguageConfiguration("gsc", getGscLanguageConfig());
   monaco.editor.defineTheme("gsc-dark", getGscTheme());
 
-  // Providers
+  // Providers — PyGSC
   _win.__pygscDisposables!.push(
-    monaco.languages.registerCompletionItemProvider("pygsc", createCompletionProvider())
+    monaco.languages.registerCompletionItemProvider("pygsc", createCompletionProvider(true))
   );
   _win.__pygscDisposables!.push(
-    monaco.languages.registerHoverProvider("pygsc", createHoverProvider())
+    monaco.languages.registerHoverProvider("pygsc", createHoverProvider(true))
   );
   _win.__pygscDisposables!.push(
     monaco.languages.registerReferenceProvider("pygsc", referenceProvider)
@@ -68,5 +68,25 @@ export function registerLanguages() {
   );
   _win.__pygscDisposables!.push(
     monaco.languages.registerCodeLensProvider("pygsc", codeLensProvider)
+  );
+
+  // Providers — GSC (for GSC-only mode)
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerCompletionItemProvider("gsc", createCompletionProvider(false))
+  );
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerHoverProvider("gsc", createHoverProvider(false))
+  );
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerReferenceProvider("gsc", referenceProvider)
+  );
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerDocumentSymbolProvider("gsc", documentSymbolProvider)
+  );
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerSignatureHelpProvider("gsc", signatureHelpProvider)
+  );
+  _win.__pygscDisposables!.push(
+    monaco.languages.registerCodeLensProvider("gsc", codeLensProvider)
   );
 }

@@ -26,6 +26,9 @@ interface EditorProps {
   onNavigateToFile: (filePath: string, line: number, col: number) => void;
   initialSplitPercent?: number;
   onSplitPercentChange?: (percent: number) => void;
+  pygscEnabled: boolean;
+  onCursorChange?: (line: number, column: number) => void;
+  projectPath: string | null;
 }
 
 /** Convert a file path to a stable URI for the language service */
@@ -171,20 +174,39 @@ function Editor(props: EditorProps) {
           parseFile(fileUri(activePath), value);
         }
 
-        const diagnostics = lint(value);
-        const markers: monaco.editor.IMarkerData[] = diagnostics.map(d => ({
-          severity: d.severity === "error"
-            ? monaco.MarkerSeverity.Error
-            : d.severity === "warning"
-              ? monaco.MarkerSeverity.Warning
-              : monaco.MarkerSeverity.Info,
-          message: d.message,
-          startLineNumber: d.line,
-          startColumn: 1,
-          endLineNumber: d.line,
-          endColumn: model.getLineMaxColumn(d.line),
-        }));
-        monaco.editor.setModelMarkers(model, "pygsc-lint", markers);
+        if (props.pygscEnabled) {
+          const diagnostics = lint(value);
+          const markers: monaco.editor.IMarkerData[] = diagnostics.map(d => ({
+            severity: d.severity === "error"
+              ? monaco.MarkerSeverity.Error
+              : d.severity === "warning"
+                ? monaco.MarkerSeverity.Warning
+                : monaco.MarkerSeverity.Info,
+            message: d.message,
+            startLineNumber: d.line,
+            startColumn: 1,
+            endLineNumber: d.line,
+            endColumn: model.getLineMaxColumn(d.line),
+          }));
+          monaco.editor.setModelMarkers(model, "pygsc-lint", markers);
+        } else {
+          // GSC-only mode: run GSC linter on input
+          monaco.editor.setModelMarkers(model, "pygsc-lint", []);
+          const gscDiags = lintGsc(value);
+          const markers: monaco.editor.IMarkerData[] = gscDiags.map(d => ({
+            severity: d.severity === "error"
+              ? monaco.MarkerSeverity.Error
+              : d.severity === "warning"
+                ? monaco.MarkerSeverity.Warning
+                : monaco.MarkerSeverity.Info,
+            message: d.message,
+            startLineNumber: d.gscLine,
+            startColumn: 1,
+            endLineNumber: d.gscLine,
+            endColumn: model.getLineMaxColumn(d.gscLine),
+          }));
+          monaco.editor.setModelMarkers(model, "gsc-lint", markers);
+        }
       }
     });
 
@@ -209,6 +231,7 @@ function Editor(props: EditorProps) {
     // Sync scroll: PyGSC → GSC (using line map for accurate positioning)
     let syncing = false;
     inputEditor.onDidScrollChange(() => {
+      if (!props.pygscEnabled) return;
       if (syncing || !outputEditor) return;
       syncing = true;
 
@@ -238,7 +261,8 @@ function Editor(props: EditorProps) {
 
     // Sync cursor position: highlight corresponding line in GSC
     inputEditor.onDidChangeCursorPosition((e) => {
-      if (!outputEditor) return;
+      props.onCursorChange?.(e.position.lineNumber, e.position.column);
+      if (!props.pygscEnabled || !outputEditor) return;
       const line = e.position.lineNumber;
       const mappedLine = mapLine(line);
       // Reveal the mapped line in the output editor
@@ -367,7 +391,28 @@ function Editor(props: EditorProps) {
     }
   });
 
+  // Switch editor language when pygscEnabled changes
   createEffect(() => {
+    if (!inputEditor) return;
+    const model = inputEditor.getModel();
+    if (!model) return;
+    const targetLang = props.pygscEnabled ? "pygsc" : "gsc";
+    if (model.getLanguageId() !== targetLang) {
+      monaco.editor.setModelLanguage(model, targetLang);
+    }
+  });
+
+  createEffect(() => {
+    if (!props.pygscEnabled) {
+      // In GSC-only mode, clear output editor and its markers
+      if (outputEditor) {
+        if (outputEditor.getValue() !== "") outputEditor.setValue("");
+        const outputModel = outputEditor.getModel();
+        if (outputModel) monaco.editor.setModelMarkers(outputModel, "gsc-lint", []);
+      }
+      return;
+    }
+
     const newOutput = props.output;
     if (outputEditor && outputEditor.getValue() !== newOutput) {
       outputEditor.setValue(newOutput);
@@ -412,6 +457,20 @@ function Editor(props: EditorProps) {
     outputEditor?.dispose();
   });
 
+  function getBreadcrumbs(): string[] {
+    const tab = props.tabs.find((t) => t.path === props.activeTabPath);
+    if (!tab) return [];
+    const filePath = tab.path.replace(/\\/g, "/");
+    const projectRoot = props.projectPath?.replace(/\\/g, "/");
+    let relativePath: string;
+    if (projectRoot && filePath.startsWith(projectRoot)) {
+      relativePath = filePath.substring(projectRoot.length + 1);
+    } else {
+      relativePath = tab.name;
+    }
+    return relativePath.split("/");
+  }
+
   return (
     <div class="editor-area">
       {/* Tab Bar */}
@@ -447,10 +506,86 @@ function Editor(props: EditorProps) {
         </div>
       </div>
 
-      {/* Empty state overlay */}
+      {/* Breadcrumbs */}
+      <Show when={props.activeTabPath && !isApiRefTab()}>
+        <div class="breadcrumbs">
+          <For each={getBreadcrumbs()}>
+            {(crumb, i) => (
+              <>
+                <Show when={i() > 0}>
+                  <span class="breadcrumb-sep">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </span>
+                </Show>
+                <span class={`breadcrumb-item ${i() === getBreadcrumbs().length - 1 ? "breadcrumb-active" : ""}`}>{crumb}</span>
+              </>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* Welcome Screen */}
       <Show when={!props.activeTabPath}>
-        <div class="editor-empty">
-          <p>Open a file to start editing</p>
+        <div class="welcome">
+          <div class="welcome-content">
+            <div class="welcome-logo">
+              <div class="welcome-logo-icon">PY</div>
+              <h1 class="welcome-title">PyGSC</h1>
+              <p class="welcome-subtitle">Pseudo-Python to GSC Transpiler for BO3 Zombies</p>
+            </div>
+
+            <div class="welcome-sections">
+              <div class="welcome-section">
+                <h2 class="welcome-section-title">Get Started</h2>
+                <div class="welcome-links">
+                  <div class="welcome-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    <span>Open a project folder from the sidebar to begin</span>
+                  </div>
+                  <div class="welcome-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Create <code>.pygsc</code> files and see live GSC output</span>
+                  </div>
+                  <div class="welcome-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Browse 3000+ BO3 engine functions in the API panel</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="welcome-section">
+                <h2 class="welcome-section-title">Quick Reference</h2>
+                <div class="welcome-shortcuts">
+                  <div class="welcome-shortcut">
+                    <kbd>Ctrl+S</kbd>
+                    <span>Save file</span>
+                  </div>
+                  <div class="welcome-shortcut">
+                    <kbd>Ctrl+Click</kbd>
+                    <span>Go to definition</span>
+                  </div>
+                  <div class="welcome-shortcut">
+                    <kbd>Ctrl+Space</kbd>
+                    <span>Autocomplete</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="welcome-section">
+                <h2 class="welcome-section-title">PyGSC Syntax</h2>
+                <pre class="welcome-code"><code>{`def on_player_spawn(player):
+    player endon "disconnect"
+
+    every 0.05:
+        if player is_on_ground():
+            player set_move_speed(1.2)
+
+    on player "weapon_fired", weapon:
+        chance 30:
+            player give_ammo(weapon, 10)`}</code></pre>
+              </div>
+            </div>
+          </div>
         </div>
       </Show>
 
@@ -465,15 +600,15 @@ function Editor(props: EditorProps) {
         ref={containerRef}
         style={{ display: props.activeTabPath && !isApiRefTab() ? "flex" : "none" }}
       >
-        <div class="editor-panel" style={{ width: `${splitPercent()}%` }}>
+        <div class="editor-panel" style={{ width: props.pygscEnabled ? `${splitPercent()}%` : "100%" }}>
           <div class="panel-header">
-            <span class="dot dot-input" />
-            PyGSC
+            <span class={`dot ${props.pygscEnabled ? "dot-input" : "dot-output"}`} />
+            {props.pygscEnabled ? "PyGSC" : gscFileName()}
           </div>
           <div class="monaco-wrapper" ref={inputContainerRef} />
         </div>
-        <div class="resize-handle" onMouseDown={onMouseDown} />
-        <div class="editor-panel" style={{ width: `${100 - splitPercent()}%` }}>
+        <div class="resize-handle" onMouseDown={onMouseDown} style={{ display: props.pygscEnabled ? undefined : "none" }} />
+        <div class="editor-panel" style={{ width: `${100 - splitPercent()}%`, display: props.pygscEnabled ? undefined : "none" }}>
           <div class="panel-header">
             <span class="dot dot-output" />
             {gscFileName()}
