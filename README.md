@@ -22,7 +22,7 @@
 
 PyGSC lets you write BO3 scripts using a Python-like syntax and transpiles them into valid GSC/CSC in real time. It also supports editing raw GSC files directly with linting, autocomplete, and API reference built in.
 
-**Example** — PyGSC on the left, generated GSC on the right:
+**Example:** PyGSC on the left, generated GSC on the right.
 
 ```python
 # PyGSC
@@ -63,28 +63,28 @@ while (true) {
 
 ### Two modes, one IDE
 
-- **PyGSC mode** — Write scripts in Pseudo-Python syntax and see the transpiled GSC output in real time on a split editor
-- **GSC-only mode** — Don't need PyGSC? Use the editor as a full GSC/CSC IDE with all the features below, no transpilation involved
+- **PyGSC mode:** write scripts in Pseudo-Python syntax and see the transpiled GSC output in real time on a split editor
+- **GSC-only mode:** don't need PyGSC? Use the editor as a full GSC/CSC IDE with all the features below, no transpilation involved
 
 ### Smart editor
 
-- **IntelliSense** — Full autocomplete for BO3 engine functions and PyGSC shortcuts, with hover tooltips showing signatures, parameters, and descriptions
-- **Go-to-definition & find references** — `Ctrl+Click` to jump to any function definition across your project, find all usages of a symbol
-- **Real-time linting** — Catches errors as you type: missing `wait` in infinite loops, undefined variables, wrong parameter counts, unbalanced braces, `waittill`/`endon` mismatches, and more — works in both PyGSC and GSC mode
-- **BO3 API reference** — Searchable database of 2000+ engine functions built into the sidebar
+- **IntelliSense:** full autocomplete for BO3 engine functions and PyGSC shortcuts, with hover tooltips showing signatures, parameters, and descriptions
+- **Go-to-definition & find references:** `Ctrl+Click` to jump to any function definition across your project, find all usages of a symbol
+- **Real-time linting:** catches errors as you type, including missing `wait` in infinite loops, undefined variables, wrong parameter counts, unbalanced braces, `waittill`/`endon` mismatches, and more. Works in both PyGSC and GSC mode
+- **BO3 API reference:** searchable database of 2000+ engine functions built into the sidebar
 
 ### PyGSC syntax
 
-- **Python-like constructs** — `def`, `import`, `#` comments, `and`/`or`/`not`, `True`/`False`/`None`
-- **Syntax sugar** — `@endon`/`@system` decorators, `repeat`/`every`/`on`/`once`/`chance` blocks, f-string interpolation
-- **700+ shortcuts** — Write `print` instead of `IPrintLnBold`, `$players` instead of `GetPlayers()`, `givepoints` instead of `zm_score::add_to_player_score`, and hundreds more
-- **Reverse transpilation** — Import existing GSC files and convert them back to PyGSC
+- **Python-like constructs:** `def`, `import`, `#` comments, `and`/`or`/`not`, `True`/`False`/`None`
+- **Syntax sugar:** `@endon`/`@system` decorators, `repeat`/`every`/`on`/`once`/`chance` blocks, f-string interpolation
+- **700+ shortcuts:** write `print` instead of `IPrintLnBold`, `$players` instead of `GetPlayers()`, `givepoints` instead of `zm_score::add_to_player_score`, and hundreds more
+- **Reverse transpilation:** import existing GSC files and convert them back to PyGSC
 
 ### Everything else
 
-- **Project management** — File explorer, multi-tab editing, unsaved change tracking
-- **Themes** — Steam Dark, Midnight, Nord, Monokai, Dracula
-- **Custom API/Usings** — Define your own PyGSC keywords and namespace mappings
+- **Project management:** file explorer, multi-tab editing, unsaved change tracking
+- **Themes:** Steam Dark, Midnight, Nord, Monokai, Dracula
+- **Custom API/Usings:** define your own PyGSC keywords and namespace mappings
 
 ## Installation
 
@@ -130,7 +130,7 @@ npm run tauri build
 1. Open PyGSC and click **Open Project** to load your BO3 mod folder
 2. Create or open a `.pygsc` file to start writing in Pseudo-Python
 3. The GSC output updates in real time in the right panel
-4. Press **Ctrl+S** to save — the transpiled GSC is written alongside your source file
+4. Press **Ctrl+S** to save (the transpiled GSC is written alongside your source file)
 
 ### Keyboard shortcuts
 
@@ -147,13 +147,15 @@ npm run tauri build
 
 ### GSC-only mode
 
-Toggle GSC-only mode from the sidebar to edit `.gsc` and `.csc` files directly with linting and autocomplete — no transpilation needed.
+Toggle GSC-only mode from the sidebar to edit `.gsc` and `.csc` files directly with linting and autocomplete, no transpilation needed.
 
 ## Tech stack
 
-- **Frontend** — [SolidJS](https://www.solidjs.com/) + [Monaco Editor](https://microsoft.github.io/monaco-editor/)
-- **Backend** — [Tauri](https://v2.tauri.app/) (Rust)
-- **Build** — [Vite](https://vite.dev/) + TypeScript
+| | |
+|---|---|
+| **Frontend** | [SolidJS](https://www.solidjs.com/) + [Monaco Editor](https://microsoft.github.io/monaco-editor/) |
+| **Backend** | [Tauri](https://v2.tauri.app/) (Rust) |
+| **Build** | [Vite](https://vite.dev/) + TypeScript |
 
 ## License
 
