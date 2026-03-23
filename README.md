@@ -26,20 +26,36 @@ PyGSC lets you write BO3 scripts using a Python-like syntax and transpiles them 
 
 ```python
 # PyGSC
-@endon("disconnect")
-def on_player_spawned(player):
-    player waittill("spawned")
-    player.health = 200
-    player iprintlnbold("Welcome!")
+fname mymod
+import scripts\zm\_zm_score
+
+def welcome_players():
+    foreach player in $players:
+        player print("Welcome!")
+        player givepoints(500)
+
+every 5:
+    if $players.size greater 0:
+        thr welcome_players()
 ```
 
 ```c
 // Generated GSC
-on_player_spawned(player) {
-    player endon("disconnect");
-    player waittill("spawned");
-    player.health = 200;
-    player IPrintLnBold("Welcome!");
+#namespace mymod;
+#using scripts\zm\_zm_score;
+
+function welcome_players() {
+    foreach (player in GetPlayers()) {
+        player IPrintLnBold("Welcome!");
+        player zm_score::add_to_player_score(500);
+    }
+}
+
+while (true) {
+    wait 5;
+    if (GetPlayers().size > 0) {
+        thread welcome_players();
+    }
 }
 ```
 
