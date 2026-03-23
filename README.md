@@ -35,7 +35,7 @@ def welcome_players():
         player givepoints(500)
 
 every 5:
-    if $players.size greater 0:
+    if $players.size > 0:
         thr welcome_players()
 ```
 
@@ -61,13 +61,27 @@ while (true) {
 
 ## Features
 
-- **Real-time transpilation** — Write PyGSC, see GSC output instantly in a split editor
-- **Reverse transpilation** — Import existing GSC files and convert them to PyGSC
-- **GSC-only mode** — Edit raw GSC/CSC files with full editor support
-- **Syntax sugar** — `@endon`, `@system` decorators, `repeat`/`every` loops, f-string interpolation, `and`/`or`/`not` operators
-- **IntelliSense** — Autocomplete, hover tooltips, go-to-definition, find references across your project
-- **Linting** — Real-time diagnostics for both PyGSC and GSC (missing waits, undefined variables, brace balancing, parameter counts, and more)
-- **BO3 API reference** — Searchable database of 2000+ engine functions with signatures and descriptions
+### Two modes, one IDE
+
+- **PyGSC mode** — Write scripts in Pseudo-Python syntax and see the transpiled GSC output in real time on a split editor
+- **GSC-only mode** — Don't need PyGSC? Use the editor as a full GSC/CSC IDE with all the features below, no transpilation involved
+
+### Smart editor
+
+- **IntelliSense** — Full autocomplete for BO3 engine functions and PyGSC shortcuts, with hover tooltips showing signatures, parameters, and descriptions
+- **Go-to-definition & find references** — `Ctrl+Click` to jump to any function definition across your project, find all usages of a symbol
+- **Real-time linting** — Catches errors as you type: missing `wait` in infinite loops, undefined variables, wrong parameter counts, unbalanced braces, `waittill`/`endon` mismatches, and more — works in both PyGSC and GSC mode
+- **BO3 API reference** — Searchable database of 2000+ engine functions built into the sidebar
+
+### PyGSC syntax
+
+- **Python-like constructs** — `def`, `import`, `#` comments, `and`/`or`/`not`, `True`/`False`/`None`
+- **Syntax sugar** — `@endon`/`@system` decorators, `repeat`/`every`/`on`/`once`/`chance` blocks, f-string interpolation
+- **700+ shortcuts** — Write `print` instead of `IPrintLnBold`, `$players` instead of `GetPlayers()`, `givepoints` instead of `zm_score::add_to_player_score`, and hundreds more
+- **Reverse transpilation** — Import existing GSC files and convert them back to PyGSC
+
+### Everything else
+
 - **Project management** — File explorer, multi-tab editing, unsaved change tracking
 - **Themes** — Steam Dark, Midnight, Nord, Monokai, Dracula
 - **Custom API/Usings** — Define your own PyGSC keywords and namespace mappings
