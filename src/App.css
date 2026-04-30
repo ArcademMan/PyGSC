@@ -1148,6 +1148,18 @@ body {
   height: 100%;
   background: var(--bg-dark);
   overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.api-ref-page button,
+.api-ref-page .api-ref-list-item,
+.api-ref-page .api-ref-tab,
+.api-ref-page .api-ref-pygsc-cat,
+.api-ref-page .api-badge,
+.api-ref-page .param-badge {
+  cursor: default;
 }
 
 .api-ref-header {

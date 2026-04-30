@@ -1,6 +1,50 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, UNIX_EPOCH};
+
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use tauri::{AppHandle, Emitter, State};
+
+type AppDebouncer = Debouncer<RecommendedWatcher, FileIdMap>;
+
+#[derive(Default)]
+struct WatcherInner {
+    debouncer: Option<AppDebouncer>,
+    /// Files currently tracked. Events for paths not in this set are filtered out.
+    watched_files: std::collections::HashSet<PathBuf>,
+    /// Refcount of how many tracked files live in each parent directory.
+    dir_refs: HashMap<PathBuf, usize>,
+}
+
+struct WatcherState(Arc<Mutex<WatcherInner>>);
+
+#[derive(Serialize, Clone)]
+struct FileStat {
+    size: u64,
+    mtime_ms: i64,
+}
+
+#[derive(Serialize, Clone)]
+struct FileChangedPayload {
+    path: String,
+}
+
+fn read_file_stat(path: &Path) -> Result<FileStat, String> {
+    let meta = fs::metadata(path).map_err(|e| e.to_string())?;
+    let mtime = meta.modified().map_err(|e| e.to_string())?;
+    let mtime_ms = mtime
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    Ok(FileStat {
+        size: meta.len(),
+        mtime_ms,
+    })
+}
 
 #[derive(Serialize, Clone)]
 pub struct FileEntry {
@@ -167,6 +211,60 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn stat_file(path: String) -> Result<FileStat, String> {
+    read_file_stat(Path::new(&path))
+}
+
+#[tauri::command]
+fn watch_file(path: String, state: State<WatcherState>) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    let parent = match p.parent() {
+        Some(parent) => parent.to_path_buf(),
+        None => return Err("File has no parent directory".to_string()),
+    };
+    let mut inner = state.0.lock().map_err(|e| e.to_string())?;
+    if inner.watched_files.contains(&p) {
+        return Ok(());
+    }
+    let needs_dir_watch = !inner.dir_refs.contains_key(&parent);
+    if needs_dir_watch {
+        let deb = inner
+            .debouncer
+            .as_mut()
+            .ok_or_else(|| "Watcher not initialized".to_string())?;
+        deb.watcher()
+            .watch(&parent, RecursiveMode::NonRecursive)
+            .map_err(|e| e.to_string())?;
+    }
+    *inner.dir_refs.entry(parent).or_insert(0) += 1;
+    inner.watched_files.insert(p);
+    Ok(())
+}
+
+#[tauri::command]
+fn unwatch_file(path: String, state: State<WatcherState>) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    let parent = match p.parent() {
+        Some(parent) => parent.to_path_buf(),
+        None => return Ok(()),
+    };
+    let mut inner = state.0.lock().map_err(|e| e.to_string())?;
+    if !inner.watched_files.remove(&p) {
+        return Ok(());
+    }
+    if let Some(count) = inner.dir_refs.get_mut(&parent) {
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            inner.dir_refs.remove(&parent);
+            if let Some(deb) = inner.debouncer.as_mut() {
+                let _ = deb.watcher().unwatch(&parent);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn create_file(path: String) -> Result<(), String> {
     if Path::new(&path).exists() {
         return Err("File already exists".to_string());
@@ -223,23 +321,75 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn init_watcher(app: &AppHandle, inner: Arc<Mutex<WatcherInner>>) -> Result<(), String> {
+    let app_handle = app.clone();
+    let inner_for_handler = inner.clone();
+    let debouncer = new_debouncer(
+        Duration::from_millis(250),
+        None,
+        move |result: DebounceEventResult| {
+            let events = match result {
+                Ok(events) => events,
+                Err(errs) => {
+                    for e in errs {
+                        log::warn!("file watcher error: {e}");
+                    }
+                    return;
+                }
+            };
+            let watched = match inner_for_handler.lock() {
+                Ok(g) => g.watched_files.clone(),
+                Err(_) => return,
+            };
+            let mut emitted: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+            for ev in events {
+                for path in &ev.paths {
+                    if watched.contains(path) && emitted.insert(path.clone()) {
+                        let _ = app_handle.emit(
+                            "pygsc:file-changed",
+                            FileChangedPayload {
+                                path: path.to_string_lossy().to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        },
+    )
+    .map_err(|e| e.to_string())?;
+
+    inner
+        .lock()
+        .map_err(|e| e.to_string())?
+        .debouncer = Some(debouncer);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let watcher_inner: Arc<Mutex<WatcherInner>> = Arc::new(Mutex::new(WatcherInner::default()));
+    let watcher_state = WatcherState(watcher_inner.clone());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(watcher_state)
         .invoke_handler(tauri::generate_handler![
             read_directory, read_file, write_file,
             create_file, create_directory, delete_path, rename_path, copy_path,
             load_config, save_config,
-            load_custom_api, save_custom_api, load_custom_usings, save_custom_usings
+            load_custom_api, save_custom_api, load_custom_usings, save_custom_usings,
+            stat_file, watch_file, unwatch_file
         ])
-        .setup(|app| {
+        .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+            if let Err(e) = init_watcher(app.handle(), watcher_inner.clone()) {
+                log::error!("failed to init file watcher: {e}");
             }
             Ok(())
         })

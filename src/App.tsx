@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { transpileWithMap, reverseTranspile, mergeCustomApi, mergeCustomUsings, lint, lintGsc, indexGshDefines } from "./lib/transpiler";
 import { parseFile, invalidateApiNames } from "./lib/language-service";
@@ -19,6 +20,11 @@ export interface FileEntry {
   children: FileEntry[] | null;
 }
 
+export interface FileStat {
+  size: number;
+  mtime_ms: number;
+}
+
 export interface OpenTab {
   path: string;
   name: string;
@@ -28,6 +34,18 @@ export interface OpenTab {
   type?: "file" | "api-reference";
   /** Maps each PyGSC line (0-based) to its corresponding GSC line (0-based) */
   lineMap?: number[];
+  /** Raw content as last seen on disk (for external-change detection) */
+  lastDiskContent?: string;
+  /** Stat of the file on disk at last sync (for save-time conflict detection) */
+  diskStat?: FileStat;
+}
+
+/** Normalize for compare-only purposes: strip BOM and unify line endings.
+ *  Does NOT alter what we store or write — only used to suppress spurious
+ *  prompts when an external tool rewrote the file with different line endings. */
+function normalizeForCompare(s: string): string {
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+  return s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 /** Convert a file path to a stable URI for the language service */
@@ -211,8 +229,19 @@ function App() {
     }
   }
 
+  let unlistenFileChanged: UnlistenFn | null = null;
+
   onMount(async () => {
     document.addEventListener("keydown", handleKeyDown);
+
+    try {
+      unlistenFileChanged = await listen<{ path: string }>(
+        "pygsc:file-changed",
+        (event) => { handleExternalChange(event.payload.path); }
+      );
+    } catch (e) {
+      console.warn("Failed to register file-changed listener:", e);
+    }
 
     // Load custom API/usings before anything else
     try {
@@ -264,6 +293,7 @@ function App() {
 
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown);
+    if (unlistenFileChanged) unlistenFileChanged();
   });
 
   // Code change handler
@@ -401,6 +431,13 @@ function App() {
         errorCount = gscDiags.filter(d => d.severity === "error").length;
       }
 
+      let diskStat: FileStat | undefined;
+      try {
+        diskStat = await invoke<FileStat>("stat_file", { path: filePath });
+      } catch (e) {
+        console.warn("stat_file failed:", e);
+      }
+
       const newTab: OpenTab = {
         path: filePath,
         name: fileNameFromPath(filePath),
@@ -408,6 +445,8 @@ function App() {
         output,
         unsaved: false,
         lineMap,
+        lastDiskContent: content,
+        diskStat,
       };
 
       suppressUnsaved = true;
@@ -417,6 +456,12 @@ function App() {
       parseFile(fileUri(filePath), code);
       setFileErrors((prev) => ({ ...prev, [filePath]: errorCount }));
       if (persist) persistConfig({ last_file: filePath });
+
+      try {
+        await invoke("watch_file", { path: filePath });
+      } catch (e) {
+        console.warn("watch_file failed:", e);
+      }
     } catch (e) {
       console.error("Failed to read file:", e);
     }
@@ -425,19 +470,147 @@ function App() {
   async function saveCurrentFile() {
     const tab = getActiveTab();
     if (!tab) return;
-    try {
-      if (pygscEnabled() && isGscFile(tab.path)) {
-        // PyGSC mode: save transpiled output for .gsc/.csc files
-        await invoke("write_file", { path: tab.path, content: tab.output });
-      } else {
-        // GSC-only mode or .pygsc file: save code directly
-        await invoke("write_file", { path: tab.path, content: tab.code });
+
+    // Pre-save conflict check: did the file change on disk since we last synced?
+    if (tab.diskStat) {
+      try {
+        const current = await invoke<FileStat>("stat_file", { path: tab.path });
+        const changed =
+          current.size !== tab.diskStat.size ||
+          current.mtime_ms !== tab.diskStat.mtime_ms;
+        if (changed) {
+          const overwrite = await ask(
+            `"${tab.name}" was modified on disk by another program. Overwrite with your changes?\n\nClick Cancel to discard your changes and reload from disk.`,
+            { title: "File changed on disk", kind: "warning" }
+          );
+          if (!overwrite) {
+            await reloadFromDisk(tab.path);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("pre-save stat failed:", e);
       }
-      updateTab(tab.path, { unsaved: false });
+    }
+
+    const contentToWrite =
+      pygscEnabled() && isGscFile(tab.path) ? tab.output : tab.code;
+    try {
+      await invoke("write_file", { path: tab.path, content: contentToWrite });
+      let newStat: FileStat | undefined;
+      try {
+        newStat = await invoke<FileStat>("stat_file", { path: tab.path });
+      } catch { /* ignore */ }
+      updateTab(tab.path, {
+        unsaved: false,
+        lastDiskContent: contentToWrite,
+        diskStat: newStat,
+      });
       showToast(`Saved ${tab.name}`, "success");
     } catch (e) {
       console.error("Failed to save file:", e);
       showToast(`Failed to save: ${e}`, "error");
+    }
+  }
+
+  /** Reload a tab's content from disk, replacing the buffer. */
+  async function reloadFromDisk(filePath: string) {
+    try {
+      const content = await invoke<string>("read_file", { path: filePath });
+      let stat: FileStat | undefined;
+      try {
+        stat = await invoke<FileStat>("stat_file", { path: filePath });
+      } catch { /* ignore */ }
+
+      let code: string;
+      let output: string;
+      let lineMap: number[] | undefined;
+
+      if (pygscEnabled()) {
+        if (isGscFile(filePath)) {
+          try {
+            code = reverseTranspile(content);
+            output = content;
+            try {
+              const r = transpileWithMap(code);
+              lineMap = r.lineMap;
+            } catch { /* ignore */ }
+          } catch {
+            code = content;
+            output = "// Reverse transpile error";
+          }
+        } else {
+          code = content;
+          try {
+            const r = transpileWithMap(content);
+            output = r.code;
+            lineMap = r.lineMap;
+          } catch {
+            output = "// Transpile error";
+          }
+        }
+      } else {
+        code = content;
+        output = "";
+      }
+
+      suppressUnsaved = true;
+      updateTab(filePath, {
+        code,
+        output,
+        lineMap,
+        unsaved: false,
+        lastDiskContent: content,
+        diskStat: stat,
+      });
+      parseFile(fileUri(filePath), code);
+    } catch (e) {
+      console.error("Failed to reload file:", e);
+      showToast(`Failed to reload: ${e}`, "error");
+    }
+  }
+
+  /** Handle a file-changed event from the OS watcher. */
+  async function handleExternalChange(filePath: string) {
+    const tab = tabs().find((t) => t.path === filePath);
+    if (!tab) return;
+    let disk: string;
+    try {
+      disk = await invoke<string>("read_file", { path: filePath });
+    } catch (e) {
+      // Read may transiently fail if the file is mid-write; the debouncer
+      // usually waits long enough, but if not just give up silently.
+      console.warn("read_file in change handler failed:", e);
+      return;
+    }
+    // Compare normalized forms to suppress no-op rewrites (CRLF/BOM only changes).
+    const last = tab.lastDiskContent ?? "";
+    if (normalizeForCompare(disk) === normalizeForCompare(last)) {
+      // Self-write or cosmetic-only rewrite — just refresh the tracked stat.
+      try {
+        const stat = await invoke<FileStat>("stat_file", { path: filePath });
+        updateTab(filePath, { lastDiskContent: disk, diskStat: stat });
+      } catch { /* ignore */ }
+      return;
+    }
+    if (tab.unsaved) {
+      const reload = await ask(
+        `"${tab.name}" was changed on disk. You have unsaved changes — reload from disk and lose them?`,
+        { title: "File changed on disk", kind: "warning" }
+      );
+      if (reload) {
+        await reloadFromDisk(filePath);
+      } else {
+        // User keeps their buffer; refresh stored disk snapshot so the next
+        // save's stat-check compares against the new external state.
+        try {
+          const stat = await invoke<FileStat>("stat_file", { path: filePath });
+          updateTab(filePath, { lastDiskContent: disk, diskStat: stat });
+        } catch { /* ignore */ }
+      }
+    } else {
+      await reloadFromDisk(filePath);
+      showToast(`Reloaded ${tab.name} from disk`, "info");
     }
   }
 
@@ -471,6 +644,14 @@ function App() {
 
     const newTabs = tabList.filter((t) => t.path !== path);
     setTabs(newTabs);
+
+    if (tab.type !== "api-reference") {
+      try {
+        await invoke("unwatch_file", { path });
+      } catch (e) {
+        console.warn("unwatch_file failed:", e);
+      }
+    }
 
     // Switch to adjacent tab if closing the active one
     if (activeTabPath() === path) {
@@ -545,6 +726,7 @@ function App() {
           const remaining = tabs();
           setActiveTabPath(remaining.length > 0 ? remaining[0].path : null);
         }
+        try { await invoke("unwatch_file", { path }); } catch { /* ignore */ }
       }
       await refreshProject();
       showToast("Deleted successfully", "info");
@@ -569,6 +751,8 @@ function App() {
         if (activeTabPath() === oldPath) {
           setActiveTabPath(newPath);
         }
+        try { await invoke("unwatch_file", { path: oldPath }); } catch { /* ignore */ }
+        try { await invoke("watch_file", { path: newPath }); } catch { /* ignore */ }
       }
       await refreshProject();
       showToast("Renamed successfully", "info");
